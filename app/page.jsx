@@ -64,8 +64,8 @@ export default async function HomePage() {
               </Button>
             </div>
 
-            <div className="relative h-[500px] md:h-[600px]">
-              <Image src="/images/image.png" alt="Featured product" fill className="object-contain" priority />
+            <div className="relative h-125 md:h-150">
+              <Image src="/images/home.jpg" alt="Featured product" fill className="object-contain" priority />
             </div>
           </div>
         </div>

@@ -80,7 +80,7 @@ export default async function OrdersPage() {
             <div className="space-y-3 mb-4">
               {order.items.map((item) => (
                 <div key={item.id} className="flex gap-3">
-                  <div className="w-16 h-20 bg-muted overflow-hidden flex-shrink-0">
+                  <div className="w-16 h-20 bg-muted overflow-hidden shrink-0">
                     <Image
                       src={item.product.images[0] || "/placeholder.svg"}
                       alt={item.product.title}

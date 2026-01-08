@@ -1,6 +1,7 @@
 const { PrismaClient } = require("@prisma/client")
 const bcrypt = require("bcryptjs")
 const path = require("path")
+const fs = require("fs")
 const { pathToFileURL } = require("url")
 
 const prisma = new PrismaClient()
@@ -52,8 +53,53 @@ const buildVariants = (baseSku, basePrice) => {
 
 const randomPrice = (index) => 14900 + (index % 5) * 1000
 
+const imageBasePath = path.join(__dirname, "..", "public", "images", "products")
+
+const readCategoryImages = () => {
+  if (!fs.existsSync(imageBasePath)) return {}
+  const categoryDirs = fs.readdirSync(imageBasePath, { withFileTypes: true }).filter((dirent) => dirent.isDirectory())
+  const images = {}
+
+  categoryDirs.forEach((dirent) => {
+    const categoryName = dirent.name
+    const files = fs.readdirSync(path.join(imageBasePath, categoryName))
+    const categoryImage = files.find((file) => file.toLowerCase().includes("category"))
+    if (categoryImage) {
+      images[categoryName.toLowerCase()] = `/images/products/${categoryName}/${categoryImage}`
+    }
+  })
+
+  return images
+}
+
+const readProductImages = () => {
+  if (!fs.existsSync(imageBasePath)) return {}
+  const categoryDirs = fs.readdirSync(imageBasePath, { withFileTypes: true }).filter((dirent) => dirent.isDirectory())
+  const images = {}
+
+  categoryDirs.forEach((dirent) => {
+    const categoryName = dirent.name
+    const files = fs.readdirSync(path.join(imageBasePath, categoryName))
+    files.forEach((file) => {
+      if (file.toLowerCase().includes("category")) return
+      const baseName = file.replace(/\.[^/.]+$/, "")
+      const [titlePart] = baseName.split(" - ")
+      if (!titlePart) return
+      const key = titlePart.trim().toLowerCase()
+      if (!images[key]) {
+        images[key] = []
+      }
+      images[key].push(`/images/products/${categoryName}/${file}`)
+    })
+  })
+
+  return images
+}
+
 async function main() {
   const { categories: categorySeeds, products: productSeeds } = await loadMockData()
+  const categoryImages = readCategoryImages()
+  const productImages = readProductImages()
   const adminEmail = process.env.ADMIN_EMAIL
   const adminPassword = process.env.ADMIN_PASSWORD
 
@@ -115,16 +161,17 @@ async function main() {
   const categorySlugMap = {}
   for (const category of categorySeeds) {
     const slug = category.slug || slugify(category.name)
+    const imageOverride = categoryImages[category.name.toLowerCase()] || categoryImages[slug]
     const created = await prisma.category.upsert({
       where: { slug },
       update: {
         name: category.name,
-        image: category.image,
+        image: imageOverride || category.image,
       },
       create: {
         name: category.name,
         slug,
-        image: category.image,
+        image: imageOverride || category.image,
       },
     })
     categoryMap[category.name] = created.id
@@ -143,6 +190,8 @@ async function main() {
       categoryIdMap[product.categoryId] ||
       Object.values(categoryMap)[0]
     const basePrice = randomPrice(i)
+    const imageKey = product.title.toLowerCase()
+    const imageOverride = productImages[imageKey]
     const variants =
       product.variants && product.variants.length > 0
         ? product.variants.map((variant) => ({
@@ -157,6 +206,7 @@ async function main() {
     const tags = product.tags || []
     const featured = Boolean(product.featured)
     const bestSelling = tags.includes("bestseller") || tags.includes("best-selling")
+    const images = imageOverride && imageOverride.length > 0 ? imageOverride : product.images
 
     await prisma.product.upsert({
       where: { slug },
@@ -164,7 +214,7 @@ async function main() {
         title: product.title,
         description: product.description,
         tags,
-        images: product.images,
+        images,
         featured,
         bestSelling,
         categoryId,
@@ -178,7 +228,7 @@ async function main() {
         slug,
         description: product.description,
         tags,
-        images: product.images,
+        images,
         featured,
         bestSelling,
         categoryId,
