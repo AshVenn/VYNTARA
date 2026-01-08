@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Menu, X, LogOut, Tags } from "lucide-react"
@@ -81,7 +81,9 @@ export default function AdminLayout({ children }) {
 
       {/* Main content */}
       <div className="lg:pl-64">
-        <AdminToastHandler />
+        <Suspense fallback={null}>
+          <AdminToastHandler />
+        </Suspense>
         <header className="hidden lg:flex items-center justify-between border-b bg-background px-8 py-4">
           <div>
             <p className="text-sm text-muted-foreground">Admin</p>
