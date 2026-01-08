@@ -181,8 +181,13 @@ async function main() {
     categorySlugMap[slug] = created.id
   }
 
-  for (let i = 0; i < productSeeds.length; i += 1) {
-    const product = productSeeds[i]
+  const imageTitles = new Set(Object.keys(productImages))
+  const filteredProductSeeds = productSeeds.filter((product) =>
+    imageTitles.has(product.title.toLowerCase()),
+  )
+
+  for (let i = 0; i < filteredProductSeeds.length; i += 1) {
+    const product = filteredProductSeeds[i]
     const slug = product.slug || slugify(product.title)
     const categoryId =
       categoryMap[product.category] ||
