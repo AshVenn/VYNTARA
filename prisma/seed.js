@@ -154,14 +154,12 @@ async function main() {
     })
   }
 
-  await prisma.$transaction([
-    prisma.favorite.deleteMany(),
-    prisma.orderItem.deleteMany(),
-    prisma.order.deleteMany(),
-    prisma.productVariant.deleteMany(),
-    prisma.product.deleteMany(),
-    prisma.category.deleteMany(),
-  ])
+  await prisma.favorite.deleteMany()
+  await prisma.orderItem.deleteMany()
+  await prisma.order.deleteMany()
+  await prisma.productVariant.deleteMany()
+  await prisma.product.deleteMany()
+  await prisma.category.deleteMany()
 
   const categoryMap = {}
   const categoryIdMap = {}
