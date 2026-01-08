@@ -29,9 +29,9 @@ const loadMockData = async () => {
   }
 }
 
-const buildVariants = (baseSku, basePrice) => {
+const buildVariants = (baseSku, basePrice, colorsOverride) => {
   const sizes = ["S", "M", "L", "XL", "XXL"]
-  const colors = ["Black", "White"]
+  const colors = colorsOverride && colorsOverride.length > 0 ? colorsOverride : ["Black", "White"]
   const fit = "Regular"
   const variants = []
 
@@ -83,14 +83,21 @@ const readProductImages = () => {
     files.forEach((file) => {
       if (file.toLowerCase().includes("category")) return
       const baseName = file.replace(/\.[^/.]+$/, "")
-      const [titlePart] = baseName.split(" - ")
+      const [titlePart, colorPart] = baseName.split(" - ")
       if (!titlePart) return
       const key = titlePart.trim().toLowerCase()
       if (!images[key]) {
-        images[key] = []
+        images[key] = { images: [], categoryName, colors: new Set() }
       }
-      images[key].push(`/images/products/${categoryName}/${file}`)
+      images[key].images.push(`/images/products/${categoryName}/${file}`)
+      if (colorPart) {
+        images[key].colors.add(colorPart.trim())
+      }
     })
+  })
+
+  Object.values(images).forEach((entry) => {
+    entry.colors = Array.from(entry.colors)
   })
 
   return images
@@ -181,25 +188,29 @@ async function main() {
     categorySlugMap[slug] = created.id
   }
 
-  const imageTitles = new Set(Object.keys(productImages))
-  const filteredProductSeeds = productSeeds.filter((product) =>
-    imageTitles.has(product.title.toLowerCase()),
-  )
+  const productSeedMap = new Map(productSeeds.map((product) => [product.title.toLowerCase(), product]))
+  const imageEntries = Object.entries(productImages)
 
-  for (let i = 0; i < filteredProductSeeds.length; i += 1) {
-    const product = filteredProductSeeds[i]
-    const slug = product.slug || slugify(product.title)
+  for (let i = 0; i < imageEntries.length; i += 1) {
+    const [imageTitleKey, imageData] = imageEntries[i]
+    const productSeed = productSeedMap.get(imageTitleKey)
+    const title =
+      productSeed?.title ||
+      imageTitleKey
+        .split(" ")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+    const slug = productSeed?.slug || slugify(title)
     const categoryId =
-      categoryMap[product.category] ||
-      categorySlugMap[product.category] ||
-      categoryIdMap[product.categoryId] ||
+      categoryMap[productSeed?.category || imageData.categoryName] ||
+      categorySlugMap[productSeed?.category || imageData.categoryName] ||
+      categoryIdMap[productSeed?.categoryId] ||
       Object.values(categoryMap)[0]
     const basePrice = randomPrice(i)
-    const imageKey = product.title.toLowerCase()
-    const imageOverride = productImages[imageKey]
+    const imageOverride = imageData.images
     const variants =
-      product.variants && product.variants.length > 0
-        ? product.variants.map((variant) => ({
+      productSeed?.variants && productSeed.variants.length > 0
+        ? productSeed.variants.map((variant) => ({
             size: variant.size,
             color: variant.color,
             fit: variant.fit || "Regular",
@@ -207,17 +218,17 @@ async function main() {
             sku: variant.sku || `${slug}-${variant.size}-${variant.color[0]}`.toUpperCase(),
             available: variant.available ?? true,
           }))
-        : buildVariants(slug, basePrice)
-    const tags = product.tags || []
-    const featured = Boolean(product.featured)
+        : buildVariants(slug, basePrice, imageData.colors.length > 0 ? imageData.colors : undefined)
+    const tags = productSeed?.tags || []
+    const featured = Boolean(productSeed?.featured)
     const bestSelling = tags.includes("bestseller") || tags.includes("best-selling")
-    const images = imageOverride && imageOverride.length > 0 ? imageOverride : product.images
+    const images = imageOverride && imageOverride.length > 0 ? imageOverride : productSeed?.images || []
 
     await prisma.product.upsert({
       where: { slug },
       update: {
-        title: product.title,
-        description: product.description,
+        title,
+        description: productSeed?.description || `${title} from the ${imageData.categoryName} collection.`,
         tags,
         images,
         featured,
@@ -229,9 +240,9 @@ async function main() {
         },
       },
       create: {
-        title: product.title,
+        title,
         slug,
-        description: product.description,
+        description: productSeed?.description || `${title} from the ${imageData.categoryName} collection.`,
         tags,
         images,
         featured,
