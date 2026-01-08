@@ -15,7 +15,7 @@ export function CategoryCard({ category }) {
       </div>
       <div className="text-center">
         <h3 className="font-semibold text-lg">{category.name}</h3>
-        <p className="text-sm text-muted-foreground">{category.description}</p>
+        {category.description ? <p className="text-sm text-muted-foreground">{category.description}</p> : null}
       </div>
     </Link>
   )

@@ -1,31 +1,32 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { getCurrentUser, logout } from "@/lib/utils"
+import { signOut, useSession } from "next-auth/react"
 import { User, Package, Heart, Settings, LogOut } from "lucide-react"
 
 export default function AccountLayout({ children }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [user, setUser] = useState(null)
+  const { data: session, status } = useSession()
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (!currentUser) {
+    if (status === "unauthenticated") {
       router.push("/login")
-    } else {
-      setUser(currentUser)
     }
-  }, [router])
+  }, [router, status])
 
   const handleLogout = () => {
-    logout()
-    router.push("/")
+    signOut({ callbackUrl: "/" })
   }
 
+  if (status === "loading") {
+    return null
+  }
+
+  const user = session?.user
   if (!user) {
     return null
   }

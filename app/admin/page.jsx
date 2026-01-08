@@ -2,43 +2,44 @@ import { StatCard } from "@/components/admin/stat-card"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DollarSign, ShoppingBag, Users, TrendingUp, ArrowUpRight } from "lucide-react"
-import { orders } from "@/lib/data/orders"
-import { products } from "@/lib/data/products"
-import { users } from "@/lib/data/users"
 import Link from "next/link"
+import prisma from "@/lib/prisma"
+import { deleteCategory, deleteProduct } from "@/app/admin/actions"
 
 export const metadata = {
   title: "Admin Dashboard | VYNTARA",
 }
 
-export default function AdminDashboard() {
-  // Calculate stats
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0)
+export default async function AdminDashboard() {
+  const [orders, totalCustomers, recentOrders, orderItems, categories, products] = await Promise.all([
+    prisma.order.findMany(),
+    prisma.user.count({ where: { role: "CLIENT" } }),
+    prisma.order.findMany({
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    prisma.orderItem.findMany({
+      include: { product: true },
+    }),
+    prisma.category.findMany({ orderBy: { name: "asc" }, take: 5 }),
+    prisma.product.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
+  ])
+
+  const totalRevenueCents = orders.reduce((sum, order) => sum + order.totalCents, 0)
   const totalOrders = orders.length
-  const totalCustomers = users.length
-  const avgOrderValue = totalRevenue / totalOrders
+  const avgOrderValueCents = totalOrders > 0 ? Math.round(totalRevenueCents / totalOrders) : 0
 
-  // Recent orders
-  const recentOrders = orders.slice(0, 5)
-
-  // Top products
-  const productSales = {}
-  orders.forEach((order) => {
-    order.items.forEach((item) => {
-      if (!productSales[item.productId]) {
-        productSales[item.productId] = { quantity: 0, revenue: 0 }
-      }
-      productSales[item.productId].quantity += item.quantity
-      productSales[item.productId].revenue += item.price * item.quantity
-    })
+  const productSalesMap = new Map()
+  orderItems.forEach((item) => {
+    const existing = productSalesMap.get(item.productId) || { quantity: 0, revenueCents: 0, product: item.product }
+    existing.quantity += item.qty
+    existing.revenueCents += item.priceCents * item.qty
+    productSalesMap.set(item.productId, existing)
   })
 
-  const topProducts = Object.entries(productSales)
-    .map(([id, data]) => ({
-      product: products.find((p) => p.id === Number.parseInt(id)),
-      ...data,
-    }))
-    .sort((a, b) => b.revenue - a.revenue)
+  const topProducts = Array.from(productSalesMap.values())
+    .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 5)
 
   return (
@@ -52,7 +53,7 @@ export default function AdminDashboard() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Revenue"
-          value={`$${totalRevenue.toLocaleString()}`}
+          value={`$${(totalRevenueCents / 100).toLocaleString()}`}
           change="+12.5% from last month"
           trend="up"
           icon={DollarSign}
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
         />
         <StatCard
           title="Avg Order Value"
-          value={`$${avgOrderValue.toFixed(0)}`}
+          value={`$${(avgOrderValueCents / 100).toFixed(0)}`}
           change="-2.4% from last month"
           trend="down"
           icon={TrendingUp}
@@ -96,23 +97,23 @@ export default function AdminDashboard() {
             {recentOrders.map((order) => (
               <div key={order.id} className="flex items-center justify-between pb-4 border-b last:border-0">
                 <div>
-                  <p className="font-medium">Order #{order.orderNumber}</p>
-                  <p className="text-sm text-muted-foreground">{order.customer}</p>
+                  <p className="font-medium">Order #{order.id.slice(-6).toUpperCase()}</p>
+                  <p className="text-sm text-muted-foreground">{order.user?.name || order.user?.email}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">${order.total}</p>
+                  <p className="font-medium">${(order.totalCents / 100).toFixed(2)}</p>
                   <p
                     className={`text-sm ${
-                      order.status === "delivered"
+                      order.status === "DELIVERED"
                         ? "text-green-600"
-                        : order.status === "processing"
+                        : order.status === "PRODUCTION"
                           ? "text-blue-600"
-                          : order.status === "shipped"
+                          : order.status === "SHIPPED"
                             ? "text-purple-600"
                             : "text-yellow-600"
                     }`}
                   >
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    {order.status.charAt(0) + order.status.slice(1).toLowerCase()}
                   </p>
                 </div>
               </div>
@@ -136,14 +137,72 @@ export default function AdminDashboard() {
               <div key={index} className="flex items-center gap-4 pb-4 border-b last:border-0">
                 <img
                   src={item.product.images[0] || "/placeholder.svg"}
-                  alt={item.product.name}
-                  className="w-12 h-12 object-cover rounded"
+                  alt={item.product.title}
+                  className="w-12 h-12 object-cover"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{item.product.name}</p>
+                  <p className="font-medium truncate">{item.product.title}</p>
                   <p className="text-sm text-muted-foreground">{item.quantity} sold</p>
                 </div>
-                <p className="font-medium">${item.revenue.toLocaleString()}</p>
+                <p className="font-medium">${(item.revenueCents / 100).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold">Recent Products</h2>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/products">
+                Manage
+                <ArrowUpRight className="w-4 h-4 ml-1" />
+              </Link>
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {products.map((product) => (
+              <div key={product.id} className="flex items-center justify-between border-b pb-3 last:border-0">
+                <div>
+                  <p className="font-medium">{product.title}</p>
+                  <p className="text-sm text-muted-foreground">{product.slug}</p>
+                </div>
+                <form action={deleteProduct}>
+                  <input type="hidden" name="id" value={product.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    Delete
+                  </Button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold">Categories</h2>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/categories">
+                Manage
+                <ArrowUpRight className="w-4 h-4 ml-1" />
+              </Link>
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {categories.map((category) => (
+              <div key={category.id} className="flex items-center justify-between border-b pb-3 last:border-0">
+                <div>
+                  <p className="font-medium">{category.name}</p>
+                  <p className="text-sm text-muted-foreground">{category.slug}</p>
+                </div>
+                <form action={deleteCategory}>
+                  <input type="hidden" name="id" value={category.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    Delete
+                  </Button>
+                </form>
               </div>
             ))}
           </div>

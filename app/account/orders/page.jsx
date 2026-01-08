@@ -1,25 +1,29 @@
-"use client"
-
-import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { getCurrentUser } from "@/lib/utils"
-import { getOrdersByUserId } from "@/lib/data/orders"
 import { formatMoney } from "@/lib/utils"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Package } from "lucide-react"
+import prisma from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-export default function OrdersPage() {
-  const [orders, setOrders] = useState([])
-
-  useEffect(() => {
-    const user = getCurrentUser()
-    if (user) {
-      const userOrders = getOrdersByUserId(user.id)
-      setOrders(userOrders)
-    }
-  }, [])
+export default async function OrdersPage() {
+  const session = await getServerSession(authOptions)
+  const orders = session?.user
+    ? await prisma.order.findMany({
+        where: { userId: session.user.id },
+        include: {
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : []
 
   if (orders.length === 0) {
     return (
@@ -39,11 +43,11 @@ export default function OrdersPage() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "delivered":
+      case "DELIVERED":
         return "bg-green-100 text-green-800"
-      case "shipped":
+      case "SHIPPED":
         return "bg-blue-100 text-blue-800"
-      case "production":
+      case "PRODUCTION":
         return "bg-yellow-100 text-yellow-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -68,33 +72,29 @@ export default function OrdersPage() {
                   })}
                 </p>
               </div>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusColor(order.status)}`}
-              >
-                {order.status}
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
+                {order.status.toLowerCase()}
               </span>
             </div>
 
             <div className="space-y-3 mb-4">
-              {order.items.map((item, index) => (
-                <div key={index} className="flex gap-3">
-                  <div className="w-16 h-20 bg-muted rounded-lg overflow-hidden flex-shrink-0">
+              {order.items.map((item) => (
+                <div key={item.id} className="flex gap-3">
+                  <div className="w-16 h-20 bg-muted overflow-hidden flex-shrink-0">
                     <Image
-                      src={item.productImage || "/placeholder.svg"}
-                      alt={item.productTitle}
+                      src={item.product.images[0] || "/placeholder.svg"}
+                      alt={item.product.title}
                       width={64}
                       height={80}
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm">{item.productTitle}</h4>
+                    <h4 className="font-medium text-sm">{item.product.title}</h4>
                     <p className="text-xs text-muted-foreground">
                       {item.variant.color} / {item.variant.size} / {item.variant.fit}
                     </p>
-                    <p className="text-sm mt-1">
-                      Qty: {item.qty} × {formatMoney(item.price)}
-                    </p>
+                    <p className="text-sm mt-1">Qty: {item.qty} - {formatMoney(item.priceCents / 100)}</p>
                   </div>
                 </div>
               ))}
@@ -103,7 +103,7 @@ export default function OrdersPage() {
             <div className="flex items-center justify-between pt-4 border-t border-border">
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
-                <p className="text-lg font-semibold">{formatMoney(order.totals.total)}</p>
+                <p className="text-lg font-semibold">{formatMoney(order.totalCents / 100)}</p>
               </div>
               <Button variant="outline" asChild className="bg-transparent">
                 <Link href={`/account/orders/${order.id}`}>View Details</Link>

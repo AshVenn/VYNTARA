@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { signIn } from "next-auth/react"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -15,8 +16,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setError("")
 
     if (password !== confirmPassword) {
       setError("Passwords don't match")
@@ -28,9 +30,31 @@ export default function RegisterPage() {
       return
     }
 
-    // Mock registration
-    alert("Registration successful! Please sign in.")
-    router.push("/login")
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      setError(data.error || "Registration failed")
+      return
+    }
+
+    const result = await signIn("credentials", {
+      redirect: false,
+      email,
+      password,
+    })
+
+    if (result?.error) {
+      router.push("/login")
+      return
+    }
+
+    router.push("/account")
+    router.refresh()
   }
 
   return (
@@ -79,7 +103,7 @@ export default function RegisterPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -92,7 +116,7 @@ export default function RegisterPage() {
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="••••••••"
+                placeholder="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required

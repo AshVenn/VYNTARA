@@ -5,28 +5,28 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { OrderTimeline } from "@/components/account/order-timeline"
-import { getCurrentUser } from "@/lib/utils"
 import { getActiveOrder, getOrdersByUserId } from "@/lib/data/orders"
 import { formatMoney } from "@/lib/utils"
 import { Package, Download } from "lucide-react"
+import { useSession } from "next-auth/react"
 
 export default function AccountDashboardPage() {
+  const { data: session } = useSession()
   const [user, setUser] = useState(null)
   const [activeOrder, setActiveOrder] = useState(null)
   const [pastOrders, setPastOrders] = useState([])
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (currentUser) {
-      setUser(currentUser)
-      const active = getActiveOrder(currentUser.id)
-      const all = getOrdersByUserId(currentUser.id)
+    if (session?.user) {
+      setUser(session.user)
+      const active = getActiveOrder(session.user.id)
+      const all = getOrdersByUserId(session.user.id)
       const past = all.filter((o) => o.status === "delivered")
 
       setActiveOrder(active)
       setPastOrders(past)
     }
-  }, [])
+  }, [session])
 
   if (!user) return null
 
@@ -125,7 +125,7 @@ export default function AccountDashboardPage() {
                   <div>
                     <p className="font-semibold">{order.id}</p>
                     <p className="text-sm text-muted-foreground">
-                      {order.items.length} item{order.items.length > 1 ? "s" : ""} · {formatMoney(order.totals.total)}
+                      {order.items.length} item{order.items.length > 1 ? "s" : ""} - {formatMoney(order.totals.total)}
                     </p>
                   </div>
                 </div>

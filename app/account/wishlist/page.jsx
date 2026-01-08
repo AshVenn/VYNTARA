@@ -1,15 +1,20 @@
-"use client"
-
+import prisma from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { ProductCard } from "@/components/shared/product-card"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Heart } from "lucide-react"
-import { products } from "@/lib/data/products"
 
-export default function WishlistPage() {
-  // Mock wishlist - first 3 products
-  const wishlistProducts = products.slice(0, 3)
+export default async function WishlistPage() {
+  const session = await getServerSession(authOptions)
+  const favorites = session?.user
+    ? await prisma.favorite.findMany({
+        where: { userId: session.user.id },
+        include: { product: { include: { variants: true } } },
+      })
+    : []
 
-  if (wishlistProducts.length === 0) {
+  if (favorites.length === 0) {
     return (
       <div className="bg-background rounded-lg border border-border">
         <EmptyState
@@ -30,8 +35,8 @@ export default function WishlistPage() {
       <h1 className="text-2xl font-bold mb-6">My Wishlist</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-        {wishlistProducts.map((product) => (
-          <ProductCard key={product.id} product={product} />
+        {favorites.map((favorite) => (
+          <ProductCard key={favorite.product.id} product={favorite.product} isFavorite canFavorite />
         ))}
       </div>
     </div>

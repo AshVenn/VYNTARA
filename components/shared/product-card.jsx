@@ -1,11 +1,14 @@
 import Link from "next/link"
 import Image from "next/image"
-import { Heart } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { formatMoney } from "@/lib/utils"
+import FavoriteButton from "@/components/shared/favorite-button"
 
-export function ProductCard({ product }) {
-  const minPrice = Math.min(...product.variants.map((v) => v.price))
+export function ProductCard({ product, isFavorite = false, canFavorite = false }) {
+  const variants = product.variants || []
+  const variantPrices = variants.map((variant) =>
+    typeof variant.price === "number" ? variant.price : variant.priceCents / 100,
+  )
+  const minPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : 0
 
   return (
     <div className="group relative">
@@ -30,14 +33,7 @@ export function ProductCard({ product }) {
         </div>
       </Link>
 
-      <Button
-        size="icon"
-        variant="ghost"
-        className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background"
-      >
-        <Heart className="h-4 w-4" />
-        <span className="sr-only">Add to wishlist</span>
-      </Button>
+      {canFavorite ? <FavoriteButton productId={product.id} initial={isFavorite} /> : null}
     </div>
   )
 }

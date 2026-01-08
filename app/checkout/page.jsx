@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, useTransition } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,35 +11,73 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatMoney } from "@/lib/utils"
 import { ChevronLeft } from "lucide-react"
-
-// Mock cart data
-const cartItems = [
-  {
-    id: 1,
-    productTitle: "Basic Heavy Weight T-Shirt",
-    productImage: "/black-heavyweight-oversized-tshirt.jpg",
-    variant: { size: "L", color: "Black", fit: "Oversized" },
-    price: 199,
-    qty: 1,
-  },
-  {
-    id: 2,
-    productTitle: "Abstract Print Shirt",
-    productImage: "/images/image.png",
-    variant: { size: "L", color: "Black", fit: "Relaxed" },
-    price: 99,
-    qty: 1,
-  },
-]
+import { getCartItems, clearCartItems } from "@/lib/cart"
+import { createOrder } from "@/app/actions/checkout"
+import { useRouter } from "next/navigation"
 
 export default function CheckoutPage() {
   const [step, setStep] = useState("information") // information, shipping, payment
   const [shippingMethod, setShippingMethod] = useState("standard")
+  const [cartItems, setCartItems] = useState([])
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
+  const [formData, setFormData] = useState({
+    email: "",
+    phone: "",
+    firstName: "",
+    lastName: "",
+    country: "United States",
+    address: "",
+    city: "",
+    region: "",
+    postalCode: "",
+  })
+
+  useEffect(() => {
+    setCartItems(getCartItems())
+  }, [])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0)
   const shippingCost = shippingMethod === "express" ? 20 : shippingMethod === "standard" ? 10 : 0
   const tax = subtotal * 0.09
   const total = subtotal + shippingCost + tax
+
+  const handlePlaceOrder = () => {
+    if (!cartItems.length) {
+      alert("Your cart is empty.")
+      return
+    }
+
+    const payload = {
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        qty: item.qty,
+      })),
+      shippingMethod,
+      address: {
+        fullName: `${formData.firstName} ${formData.lastName}`.trim(),
+        phone: formData.phone,
+        line1: formData.address,
+        line2: "",
+        city: formData.city,
+        region: formData.region,
+        postalCode: formData.postalCode,
+        country: formData.country,
+        email: formData.email,
+      },
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await createOrder(payload)
+        clearCartItems()
+        router.push(`/account/orders/${result.orderId}`)
+      } catch (error) {
+        alert("Failed to place order.")
+      }
+    })
+  }
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -111,11 +149,25 @@ export default function CheckoutPage() {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="email">Email</Label>
-                        <Input id="email" type="email" placeholder="you@example.com" className="mt-2" />
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="you@example.com"
+                          className="mt-2"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        />
                       </div>
                       <div>
                         <Label htmlFor="phone">Phone</Label>
-                        <Input id="phone" type="tel" placeholder="+1 (555) 123-4567" className="mt-2" />
+                        <Input
+                          id="phone"
+                          type="tel"
+                          placeholder="+1 (555) 123-4567"
+                          className="mt-2"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
@@ -126,43 +178,79 @@ export default function CheckoutPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="firstName">First Name</Label>
-                          <Input id="firstName" placeholder="John" className="mt-2" />
+                          <Input
+                            id="firstName"
+                            placeholder="John"
+                            className="mt-2"
+                            value={formData.firstName}
+                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                          />
                         </div>
                         <div>
                           <Label htmlFor="lastName">Last Name</Label>
-                          <Input id="lastName" placeholder="Doe" className="mt-2" />
+                          <Input
+                            id="lastName"
+                            placeholder="Doe"
+                            className="mt-2"
+                            value={formData.lastName}
+                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                          />
                         </div>
                       </div>
                       <div>
                         <Label htmlFor="country">Country</Label>
-                        <Select defaultValue="us">
+                        <Select value={formData.country} onValueChange={(value) => setFormData({ ...formData, country: value })}>
                           <SelectTrigger className="mt-2">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="us">United States</SelectItem>
-                            <SelectItem value="ca">Canada</SelectItem>
-                            <SelectItem value="uk">United Kingdom</SelectItem>
+                            <SelectItem value="United States">United States</SelectItem>
+                            <SelectItem value="Canada">Canada</SelectItem>
+                            <SelectItem value="United Kingdom">United Kingdom</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
                         <Label htmlFor="address">Address</Label>
-                        <Input id="address" placeholder="123 Main St" className="mt-2" />
+                        <Input
+                          id="address"
+                          placeholder="123 Main St"
+                          className="mt-2"
+                          value={formData.address}
+                          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="city">City</Label>
-                          <Input id="city" placeholder="San Francisco" className="mt-2" />
+                          <Input
+                            id="city"
+                            placeholder="San Francisco"
+                            className="mt-2"
+                            value={formData.city}
+                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          />
                         </div>
                         <div>
                           <Label htmlFor="state">State / Region</Label>
-                          <Input id="state" placeholder="CA" className="mt-2" />
+                          <Input
+                            id="state"
+                            placeholder="CA"
+                            className="mt-2"
+                            value={formData.region}
+                            onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                          />
                         </div>
                       </div>
                       <div>
                         <Label htmlFor="zip">Postal Code</Label>
-                        <Input id="zip" placeholder="94102" className="mt-2" />
+                        <Input
+                          id="zip"
+                          placeholder="94102"
+                          className="mt-2"
+                          value={formData.postalCode}
+                          onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
@@ -248,8 +336,8 @@ export default function CheckoutPage() {
                     >
                       Back
                     </Button>
-                    <Button size="lg" className="flex-1">
-                      Place Order
+                    <Button size="lg" className="flex-1" onClick={handlePlaceOrder} disabled={isPending}>
+                      {isPending ? "Placing Order..." : "Place Order"}
                     </Button>
                   </div>
                 </div>

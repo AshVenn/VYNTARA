@@ -1,346 +1,70 @@
-"use client"
+import { notFound } from "next/navigation"
+import prisma from "@/lib/prisma"
+import ProductDetailClient from "@/components/products/product-detail-client"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-import { useState } from "react"
-import { use } from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { ProductCard } from "@/components/shared/product-card"
-import { getProductBySlug, products } from "@/lib/data/products"
-import { formatMoney } from "@/lib/utils"
-import { Heart, Truck, Shield, RotateCcw, Star, ChevronLeft, ChevronRight } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { useRouter } from "next/navigation"
-
-export default function ProductDetailPage({ params }) {
-  const { slug } = use(params)
-  const router = useRouter()
-  const product = getProductBySlug(slug)
-
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
-  const [selectedSize, setSelectedSize] = useState(null)
-  const [selectedColor, setSelectedColor] = useState(null)
-  const [selectedFit, setSelectedFit] = useState(null)
-  const [quantity, setQuantity] = useState(1)
+export async function generateMetadata({ params }) {
+  if (!params?.slug) {
+    return { title: "Product not found" }
+  }
+  const product = await prisma.product.findUnique({
+    where: { slug: params.slug },
+  })
 
   if (!product) {
-    return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold mb-4">Product not found</h1>
-        <Button asChild>
-          <Link href="/products">Back to Products</Link>
-        </Button>
-      </div>
-    )
+    return { title: "Product not found" }
   }
 
-  // Get available variants based on selections
-  const getAvailableVariants = () => {
-    return product.variants.filter((v) => {
-      if (selectedColor && v.color !== selectedColor) return false
-      if (selectedSize && v.size !== selectedSize) return false
-      if (selectedFit && v.fit !== selectedFit) return false
-      return v.available
-    })
+  return {
+    title: `${product.title} | VYNTARA`,
+    description: product.description,
   }
-
-  const currentVariant = product.variants.find(
-    (v) => v.size === selectedSize && v.color === selectedColor && v.fit === selectedFit,
-  )
-
-  const availableColors = [...new Set(product.variants.filter((v) => v.available).map((v) => v.color))]
-  const availableSizes = [...new Set(getAvailableVariants().map((v) => v.size))]
-  const availableFits = [...new Set(getAvailableVariants().map((v) => v.fit))]
-
-  const price = currentVariant ? currentVariant.price : Math.min(...product.variants.map((v) => v.price))
-
-  // Related products (from same category)
-  const relatedProducts = products.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
-
-  const handleAddToCart = () => {
-    if (!selectedSize || !selectedColor || !selectedFit) {
-      alert("Please select size, color, and fit")
-      return
-    }
-    // Mock add to cart
-    alert(`Added ${quantity} x ${product.title} to cart`)
-  }
-
-  const nextImage = () => {
-    setSelectedImageIndex((prev) => (prev + 1) % product.images.length)
-  }
-
-  const prevImage = () => {
-    setSelectedImageIndex((prev) => (prev - 1 + product.images.length) % product.images.length)
-  }
-
-  return (
-    <div>
-      <div className="container mx-auto px-4 py-8">
-        {/* Breadcrumb */}
-        <nav className="text-sm text-muted-foreground mb-6">
-          <Link href="/" className="hover:text-foreground">
-            Home
-          </Link>{" "}
-          /{" "}
-          <Link href="/products" className="hover:text-foreground">
-            Products
-          </Link>{" "}
-          / <span className="text-foreground">{product.title}</span>
-        </nav>
-
-        <div className="grid md:grid-cols-2 gap-12 mb-16">
-          {/* Image Gallery */}
-          <div>
-            <div className="aspect-[3/4] bg-muted rounded-lg overflow-hidden mb-4 relative group">
-              <Image
-                src={product.images[selectedImageIndex] || "/placeholder.svg"}
-                alt={product.title}
-                fill
-                className="object-cover"
-                priority
-              />
-              {product.images.length > 1 && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={prevImage}
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={nextImage}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                </>
-              )}
-            </div>
-
-            {/* Thumbnail Gallery */}
-            <div className="grid grid-cols-4 gap-4">
-              {product.images.map((image, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedImageIndex(index)}
-                  className={`aspect-square bg-muted rounded-lg overflow-hidden border-2 ${
-                    selectedImageIndex === index ? "border-primary" : "border-transparent"
-                  }`}
-                >
-                  <Image
-                    src={image || "/placeholder.svg"}
-                    alt={`${product.title} ${index + 1}`}
-                    width={100}
-                    height={100}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Product Info */}
-          <div>
-            <div className="mb-6">
-              <h1 className="text-4xl font-bold tracking-tight mb-2">{product.title}</h1>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="text-3xl font-bold">{formatMoney(price)}</div>
-                {product.ratingCount > 0 && (
-                  <div className="flex items-center gap-1 text-sm">
-                    <Star className="h-4 w-4 fill-primary text-primary" />
-                    <span className="font-medium">{product.ratingAvg}</span>
-                    <span className="text-muted-foreground">({product.ratingCount})</span>
-                  </div>
-                )}
-              </div>
-              <p className="text-muted-foreground text-sm">MRP incl. of all taxes</p>
-            </div>
-
-            <p className="text-muted-foreground leading-relaxed mb-8">{product.description}</p>
-
-            {/* Color Selection */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-sm font-semibold">Color</Label>
-                {selectedColor && <span className="text-sm text-muted-foreground">{selectedColor}</span>}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {availableColors.map((color) => (
-                  <Button
-                    key={color}
-                    variant={selectedColor === color ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedColor(color)}
-                  >
-                    {color}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Size Selection */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-sm font-semibold">Size</Label>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="link" size="sm" className="h-auto p-0 text-xs">
-                      Size Guide
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Size Guide</DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">Size</th>
-                            <th className="text-left py-2">Chest (in)</th>
-                            <th className="text-left py-2">Length (in)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b">
-                            <td className="py-2">XS</td>
-                            <td className="py-2">34-36</td>
-                            <td className="py-2">26</td>
-                          </tr>
-                          <tr className="border-b">
-                            <td className="py-2">S</td>
-                            <td className="py-2">36-38</td>
-                            <td className="py-2">27</td>
-                          </tr>
-                          <tr className="border-b">
-                            <td className="py-2">M</td>
-                            <td className="py-2">38-40</td>
-                            <td className="py-2">28</td>
-                          </tr>
-                          <tr className="border-b">
-                            <td className="py-2">L</td>
-                            <td className="py-2">40-42</td>
-                            <td className="py-2">29</td>
-                          </tr>
-                          <tr className="border-b">
-                            <td className="py-2">XL</td>
-                            <td className="py-2">42-44</td>
-                            <td className="py-2">30</td>
-                          </tr>
-                          <tr>
-                            <td className="py-2">2X</td>
-                            <td className="py-2">44-46</td>
-                            <td className="py-2">31</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {availableSizes.map((size) => (
-                  <Button
-                    key={size}
-                    variant={selectedSize === size ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedSize(size)}
-                  >
-                    {size}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Fit Selection */}
-            <div className="mb-8">
-              <Label className="text-sm font-semibold mb-3 block">Fit</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableFits.map((fit) => (
-                  <Button
-                    key={fit}
-                    variant={selectedFit === fit ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedFit(fit)}
-                  >
-                    {fit}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Quantity */}
-            <div className="mb-8">
-              <Label className="text-sm font-semibold mb-3 block">Quantity</Label>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  disabled={quantity <= 1}
-                >
-                  -
-                </Button>
-                <span className="text-lg font-medium w-12 text-center">{quantity}</span>
-                <Button variant="outline" size="icon" onClick={() => setQuantity(quantity + 1)}>
-                  +
-                </Button>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 mb-8">
-              <Button size="lg" className="flex-1" onClick={handleAddToCart}>
-                Add to Cart
-              </Button>
-              <Button size="lg" variant="outline">
-                <Heart className="h-5 w-5" />
-              </Button>
-            </div>
-
-            {/* Features */}
-            <div className="space-y-3 text-sm border-t border-border pt-6">
-              <div className="flex items-center gap-3">
-                <Truck className="h-5 w-5 text-muted-foreground" />
-                <span>Free shipping on orders over $100</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <RotateCcw className="h-5 w-5 text-muted-foreground" />
-                <span>30-day returns & exchanges</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-muted-foreground" />
-                <span>Secure checkout</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Related Products */}
-        {relatedProducts.length > 0 && (
-          <section className="border-t border-border pt-16">
-            <h2 className="text-2xl font-bold tracking-tight mb-8">You May Also Like</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {relatedProducts.map((relatedProduct) => (
-                <ProductCard key={relatedProduct.id} product={relatedProduct} />
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
-  )
 }
 
-function Label({ children, className = "", ...props }) {
+export default async function ProductDetailPage({ params }) {
+  if (!params?.slug) {
+    notFound()
+  }
+  const product = await prisma.product.findUnique({
+    where: { slug: params.slug },
+    include: {
+      variants: true,
+      category: true,
+    },
+  })
+
+  if (!product) {
+    notFound()
+  }
+
+  const session = await getServerSession(authOptions)
+  const favorite = session?.user
+    ? await prisma.favorite.findUnique({
+        where: {
+          userId_productId: {
+            userId: session.user.id,
+            productId: product.id,
+          },
+        },
+      })
+    : null
+
+  const relatedProducts = await prisma.product.findMany({
+    where: {
+      categoryId: product.categoryId,
+      NOT: { id: product.id },
+    },
+    include: { variants: true },
+    take: 4,
+  })
+
   return (
-    <label className={`text-sm font-medium ${className}`} {...props}>
-      {children}
-    </label>
+    <ProductDetailClient
+      product={product}
+      relatedProducts={relatedProducts}
+      isFavorite={Boolean(favorite)}
+      canFavorite={Boolean(session?.user)}
+    />
   )
 }

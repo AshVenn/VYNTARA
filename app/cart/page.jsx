@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -8,40 +8,27 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { formatMoney } from "@/lib/utils"
 import { Trash2, ShoppingBag, Plus, Minus } from "lucide-react"
 import { Input } from "@/components/ui/input"
-
-// Mock cart data
-const initialCartItems = [
-  {
-    id: 1,
-    productId: 4,
-    productTitle: "Basic Heavy Weight T-Shirt",
-    productImage: "/black-heavyweight-oversized-tshirt.jpg",
-    variant: { size: "L", color: "Black", fit: "Oversized" },
-    price: 199,
-    qty: 1,
-  },
-  {
-    id: 2,
-    productId: 1,
-    productTitle: "Abstract Print Shirt",
-    productImage: "/images/image.png",
-    variant: { size: "L", color: "Black", fit: "Relaxed" },
-    price: 99,
-    qty: 1,
-  },
-]
+import { getCartItems, setCartItems } from "@/lib/cart"
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState(initialCartItems)
+  const [cartItems, setCartItemsState] = useState([])
   const [couponCode, setCouponCode] = useState("")
+
+  useEffect(() => {
+    setCartItemsState(getCartItems())
+  }, [])
+
+  useEffect(() => {
+    setCartItems(cartItems)
+  }, [cartItems])
 
   const updateQuantity = (itemId, newQty) => {
     if (newQty < 1) return
-    setCartItems(cartItems.map((item) => (item.id === itemId ? { ...item, qty: newQty } : item)))
+    setCartItemsState(cartItems.map((item) => (item.id === itemId ? { ...item, qty: newQty } : item)))
   }
 
   const removeItem = (itemId) => {
-    setCartItems(cartItems.filter((item) => item.id !== itemId))
+    setCartItemsState(cartItems.filter((item) => item.id !== itemId))
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0)

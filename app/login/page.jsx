@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { login } from "@/lib/utils"
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -14,15 +14,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    const result = login(email, password)
+    setError("")
 
-    if (result.success) {
-      router.push("/account")
-    } else {
-      setError(result.error)
+    const result = await signIn("credentials", {
+      redirect: false,
+      email,
+      password,
+    })
+
+    if (result?.error) {
+      setError("Invalid email or password")
+      return
     }
+
+    router.push("/account")
+    router.refresh()
   }
 
   return (
@@ -58,7 +66,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

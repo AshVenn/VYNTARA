@@ -4,21 +4,21 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getCurrentUser } from "@/lib/utils"
+import { useSession } from "next-auth/react"
 
 export default function ProfilePage() {
+  const { data: session } = useSession()
   const [user, setUser] = useState(null)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (currentUser) {
-      setUser(currentUser)
-      setName(currentUser.name)
-      setEmail(currentUser.email)
+    if (session?.user) {
+      setUser(session.user)
+      setName(session.user.name || "")
+      setEmail(session.user.email || "")
     }
-  }, [])
+  }, [session])
 
   const handleSave = (e) => {
     e.preventDefault()

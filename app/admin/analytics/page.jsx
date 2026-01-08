@@ -1,32 +1,34 @@
 import { Card } from "@/components/ui/card"
 import { StatCard } from "@/components/admin/stat-card"
-import { orders } from "@/lib/data/orders"
-import { products } from "@/lib/data/products"
 import { TrendingUp, ShoppingCart, DollarSign, Package } from "lucide-react"
+import prisma from "@/lib/prisma"
 
-export default function AdminAnalytics() {
-  // Calculate analytics
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0)
+export default async function AdminAnalytics() {
+  const [orders, orderItems] = await Promise.all([
+    prisma.order.findMany(),
+    prisma.orderItem.findMany({
+      include: {
+        product: { include: { category: true } },
+      },
+    }),
+  ])
+
+  const totalRevenueCents = orders.reduce((sum, order) => sum + order.totalCents, 0)
   const totalOrders = orders.length
-  const avgOrderValue = totalRevenue / totalOrders
+  const avgOrderValueCents = totalOrders > 0 ? Math.round(totalRevenueCents / totalOrders) : 0
 
-  // Sales by category
-  const categoryRevenue = {}
-  orders.forEach((order) => {
-    order.items.forEach((item) => {
-      const product = products.find((p) => p.id === item.productId)
-      if (product) {
-        if (!categoryRevenue[product.category]) {
-          categoryRevenue[product.category] = 0
-        }
-        categoryRevenue[product.category] += item.price * item.quantity
-      }
-    })
+  const categoryRevenueMap = new Map()
+  orderItems.forEach((item) => {
+    const categoryName = item.product.category?.name || "Uncategorized"
+    const current = categoryRevenueMap.get(categoryName) || 0
+    categoryRevenueMap.set(categoryName, current + item.priceCents * item.qty)
   })
 
-  const categoryData = Object.entries(categoryRevenue)
-    .map(([category, revenue]) => ({ category, revenue }))
-    .sort((a, b) => b.revenue - a.revenue)
+  const categoryData = Array.from(categoryRevenueMap.entries())
+    .map(([category, revenueCents]) => ({ category, revenueCents }))
+    .sort((a, b) => b.revenueCents - a.revenueCents)
+
+  const revenueDivider = totalRevenueCents || 1
 
   // Monthly revenue (simulated)
   const monthlyData = [
@@ -51,7 +53,7 @@ export default function AdminAnalytics() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Revenue"
-          value={`$${totalRevenue.toLocaleString()}`}
+          value={`$${(totalRevenueCents / 100).toLocaleString()}`}
           change="+12.5%"
           trend="up"
           icon={DollarSign}
@@ -59,17 +61,14 @@ export default function AdminAnalytics() {
         <StatCard title="Total Orders" value={totalOrders} change="+8.2%" trend="up" icon={ShoppingCart} />
         <StatCard
           title="Avg Order Value"
-          value={`$${avgOrderValue.toFixed(0)}`}
+          value={`$${(avgOrderValueCents / 100).toFixed(0)}`}
           change="+3.1%"
           trend="up"
           icon={TrendingUp}
         />
         <StatCard
           title="Products Sold"
-          value={orders.reduce(
-            (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-            0,
-          )}
+          value={orderItems.reduce((sum, item) => sum + item.qty, 0)}
           change="+15.3%"
           trend="up"
           icon={Package}
@@ -106,13 +105,16 @@ export default function AdminAnalytics() {
               <div key={item.category}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">{item.category}</span>
-                  <span className="text-muted-foreground">${item.revenue.toLocaleString()}</span>
+                  <span className="text-muted-foreground">${(item.revenueCents / 100).toLocaleString()}</span>
                 </div>
                 <div className="h-2 bg-muted rounded overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: `${(item.revenue / totalRevenue) * 100}%` }} />
+                  <div
+                    className="h-full bg-primary"
+                    style={{ width: `${(item.revenueCents / revenueDivider) * 100}%` }}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {((item.revenue / totalRevenue) * 100).toFixed(1)}% of total revenue
+                  {((item.revenueCents / revenueDivider) * 100).toFixed(1)}% of total revenue
                 </p>
               </div>
             ))}
