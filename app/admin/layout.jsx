@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Menu, X, LogOut, Tags } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { signOut } from "next-auth/react"
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -79,6 +80,16 @@ export default function AdminLayout({ children }) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        <header className="hidden lg:flex items-center justify-between border-b bg-background px-8 py-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Admin</p>
+            <h2 className="text-lg font-semibold">Dashboard</h2>
+          </div>
+          <Button variant="outline" onClick={() => signOut({ callbackUrl: "/login" })}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </header>
         {/* Mobile header */}
         <header className="lg:hidden sticky top-0 bg-background border-b z-30">
           <div className="flex items-center justify-between p-4">
@@ -86,7 +97,9 @@ export default function AdminLayout({ children }) {
               <Menu className="w-5 h-5" />
             </Button>
             <h1 className="text-lg font-bold">VYNTARA</h1>
-            <div className="w-10" />
+            <Button variant="ghost" size="icon" onClick={() => signOut({ callbackUrl: "/login" })}>
+              <LogOut className="w-5 h-5" />
+            </Button>
           </div>
         </header>
 

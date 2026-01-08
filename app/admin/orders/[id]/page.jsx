@@ -15,9 +15,20 @@ const buildTimeline = (status) => {
   }))
 }
 
+const resolveParamId = async (params) => {
+  const resolvedParams =
+    params && typeof params.then === "function" ? await params : params
+  return resolvedParams?.id
+}
+
 export default async function AdminOrderDetail({ params }) {
+  const id = await resolveParamId(params)
+  if (!id) {
+    notFound()
+  }
+
   const order = await prisma.order.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       user: {
         include: { addresses: true },

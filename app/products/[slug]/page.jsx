@@ -4,12 +4,19 @@ import ProductDetailClient from "@/components/products/product-detail-client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+async function resolveSlug(params) {
+  const resolvedParams =
+    params && typeof params.then === "function" ? await params : params
+  return resolvedParams?.slug
+}
+
 export async function generateMetadata({ params }) {
-  if (!params?.slug) {
-    return { title: "Product not found" }
+  const slug = await resolveSlug(params)
+  if (!slug) {
+    return { title: "VYNTARA" }
   }
   const product = await prisma.product.findUnique({
-    where: { slug: params.slug },
+    where: { slug },
   })
 
   if (!product) {
@@ -23,11 +30,12 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function ProductDetailPage({ params }) {
-  if (!params?.slug) {
-    notFound()
+  const slug = await resolveSlug(params)
+  if (!slug) {
+    return null
   }
   const product = await prisma.product.findUnique({
-    where: { slug: params.slug },
+    where: { slug },
     include: {
       variants: true,
       category: true,

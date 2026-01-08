@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { createCategory, updateCategory, deleteCategory } from "@/app/admin/actions"
 import ImageUploader from "@/components/admin/image-uploader"
+import { Textarea } from "@/components/ui/textarea"
 
 export default async function AdminCategories() {
   const categories = await prisma.category.findMany({
@@ -28,6 +29,18 @@ export default async function AdminCategories() {
           <div>
             <Label htmlFor="slug">Slug</Label>
             <Input id="slug" name="slug" placeholder="streetwear" className="mt-2" required />
+            <p className="text-xs text-muted-foreground mt-2">Lowercase, numbers, and hyphens only.</p>
+          </div>
+          <div className="md:col-span-3">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              name="description"
+              placeholder="Short SEO-friendly summary (20-160 chars)."
+              className="mt-2"
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-2">Keep it concise and keyword-rich.</p>
           </div>
           <div className="md:col-span-3">
             <Label htmlFor="imageManual">Image URL (optional)</Label>
@@ -69,6 +82,19 @@ export default async function AdminCategories() {
                     className="mt-2"
                     required
                   />
+                  <p className="text-xs text-muted-foreground mt-2">Lowercase, numbers, and hyphens only.</p>
+                </div>
+                <div className="md:col-span-4">
+                  <Label htmlFor={`description-${category.id}`}>Description</Label>
+                  <Textarea
+                    id={`description-${category.id}`}
+                    name="description"
+                    defaultValue={category.description || ""}
+                    className="mt-2"
+                    rows={3}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">Keep it concise and keyword-rich.</p>
                 </div>
                 <div className="md:col-span-4">
                   <Label htmlFor={`imageManual-${category.id}`}>Image URL (optional)</Label>

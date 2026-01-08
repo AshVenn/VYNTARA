@@ -12,6 +12,9 @@ const shippingCostMap = {
 
 export async function createOrder(payload) {
   const session = await requireAuth()
+  if (session?.user?.role === "ADMIN") {
+    throw new Error("Admins cannot create orders.")
+  }
   const parsed = checkoutSchema.safeParse(payload)
   if (!parsed.success) {
     throw new Error("Invalid checkout data")

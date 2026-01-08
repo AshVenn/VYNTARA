@@ -59,6 +59,7 @@ export async function createCategory(formData) {
   const payload = {
     name: formData.get("name"),
     slug: formData.get("slug"),
+    description: formData.get("description"),
     image: imageValue,
     imagePublicId: formData.get("imagePublicId") || null,
   }
@@ -79,6 +80,7 @@ export async function updateCategory(formData) {
     id: formData.get("id"),
     name: formData.get("name"),
     slug: formData.get("slug"),
+    description: formData.get("description"),
     image: imageValue,
     imagePublicId: formData.get("imagePublicId") || null,
   }
@@ -94,6 +96,7 @@ export async function updateCategory(formData) {
     data: {
       name: parsed.data.name,
       slug: parsed.data.slug,
+      description: parsed.data.description,
       image: parsed.data.image,
       imagePublicId: parsed.data.imagePublicId,
     },

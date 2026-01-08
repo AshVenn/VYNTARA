@@ -7,20 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import ImageUploader from "@/components/admin/image-uploader"
+import VariantsEditor from "@/components/admin/variants-editor"
 
 export default async function NewProductPage() {
   const categories = await prisma.category.findMany({
     orderBy: { name: "asc" },
   })
 
-  const exampleVariants = JSON.stringify(
-    [
-      { size: "S", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-S-B", available: true },
-      { size: "M", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-M-B", available: true },
-    ],
-    null,
-    2,
-  )
+  const initialVariants = [
+    { size: "S", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-S-B", available: true },
+    { size: "M", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-M-B", available: true },
+  ]
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -44,12 +41,14 @@ export default async function NewProductPage() {
             <div>
               <Label htmlFor="slug">Slug</Label>
               <Input id="slug" name="slug" className="mt-2" required />
+              <p className="text-xs text-muted-foreground mt-2">Lowercase, numbers, and hyphens only.</p>
             </div>
           </div>
 
           <div>
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" name="description" rows={4} className="mt-2" required />
+            <p className="text-xs text-muted-foreground mt-2">Aim for 50-160 characters for SEO.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -97,16 +96,7 @@ export default async function NewProductPage() {
 
           <ImageUploader label="Product Images" name="images" publicIdName="imagesPublicIds" multiple />
 
-          <div>
-            <Label htmlFor="variants">Variants (JSON array)</Label>
-            <Textarea
-              id="variants"
-              name="variants"
-              rows={8}
-              className="mt-2 font-mono text-xs"
-              defaultValue={exampleVariants}
-            />
-          </div>
+          <VariantsEditor name="variants" initialVariants={initialVariants} />
 
           <div className="flex justify-end">
             <Button type="submit">Create Product</Button>

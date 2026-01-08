@@ -8,10 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import ImageUploader from "@/components/admin/image-uploader"
+import VariantsEditor from "@/components/admin/variants-editor"
+
+const resolveParamId = async (params) => {
+  const resolvedParams =
+    params && typeof params.then === "function" ? await params : params
+  return resolvedParams?.id
+}
 
 export default async function EditProductPage({ params }) {
+  const id = await resolveParamId(params)
+  if (!id) {
+    notFound()
+  }
+
   const product = await prisma.product.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { variants: true },
   })
 
@@ -23,18 +35,14 @@ export default async function EditProductPage({ params }) {
     orderBy: { name: "asc" },
   })
 
-  const variantsJson = JSON.stringify(
-    product.variants.map((variant) => ({
-      size: variant.size,
-      color: variant.color,
-      fit: variant.fit,
-      priceCents: variant.priceCents,
-      sku: variant.sku,
-      available: variant.available,
-    })),
-    null,
-    2,
-  )
+  const initialVariants = product.variants.map((variant) => ({
+    size: variant.size,
+    color: variant.color,
+    fit: variant.fit,
+    priceCents: variant.priceCents,
+    sku: variant.sku,
+    available: variant.available,
+  }))
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -60,12 +68,14 @@ export default async function EditProductPage({ params }) {
             <div>
               <Label htmlFor="slug">Slug</Label>
               <Input id="slug" name="slug" defaultValue={product.slug} className="mt-2" required />
+              <p className="text-xs text-muted-foreground mt-2">Lowercase, numbers, and hyphens only.</p>
             </div>
           </div>
 
           <div>
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" name="description" defaultValue={product.description} rows={4} className="mt-2" />
+            <p className="text-xs text-muted-foreground mt-2">Aim for 50-160 characters for SEO.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -124,10 +134,7 @@ export default async function EditProductPage({ params }) {
             }))}
           />
 
-          <div>
-            <Label htmlFor="variants">Variants (JSON array)</Label>
-            <Textarea id="variants" name="variants" rows={10} className="mt-2 font-mono text-xs" defaultValue={variantsJson} />
-          </div>
+          <VariantsEditor name="variants" initialVariants={initialVariants} />
 
           <div className="flex justify-end">
             <Button type="submit">Save Changes</Button>

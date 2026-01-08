@@ -171,11 +171,13 @@ async function main() {
       where: { slug },
       update: {
         name: category.name,
+        description: category.description || `${category.name} pieces curated for everyday wear.`,
         image: imageOverride || category.image,
       },
       create: {
         name: category.name,
         slug,
+        description: category.description || `${category.name} pieces curated for everyday wear.`,
         image: imageOverride || category.image,
       },
     })

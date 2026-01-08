@@ -7,9 +7,13 @@ import { Package } from "lucide-react"
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
 export default async function OrdersPage() {
   const session = await getServerSession(authOptions)
+  if (session?.user?.role === "ADMIN") {
+    redirect("/admin/orders")
+  }
   const orders = session?.user
     ? await prisma.order.findMany({
         where: { userId: session.user.id },
