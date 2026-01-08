@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { signIn } from "next-auth/react"
+import { getSession, signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -29,6 +29,11 @@ export default function LoginPage() {
       return
     }
 
+    const session = await getSession()
+    if (session?.user?.role === "ADMIN") {
+      router.push("/admin")
+      return
+    }
     router.push("/account")
     router.refresh()
   }
