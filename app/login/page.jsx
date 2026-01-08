@@ -7,35 +7,47 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSession, signIn } from "next-auth/react"
+import { toast } from "sonner"
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError("")
+    setIsLoading(true)
 
-    const result = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    })
+    try {
+      const result = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      })
 
-    if (result?.error) {
-      setError("Invalid email or password")
-      return
+      if (result?.error) {
+        setError("Invalid email or password")
+        toast.error("Login failed. Check your credentials.")
+        return
+      }
+
+      toast.success("Connected. Welcome back!")
+      const session = await getSession()
+      if (session?.user?.role === "ADMIN") {
+        router.push("/admin")
+        return
+      }
+      router.push("/account")
+      router.refresh()
+    } catch (err) {
+      setError("Something went wrong. Please try again.")
+      toast.error("Login failed. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-
-    const session = await getSession()
-    if (session?.user?.role === "ADMIN") {
-      router.push("/admin")
-      return
-    }
-    router.push("/account")
-    router.refresh()
   }
 
   return (
@@ -79,8 +91,8 @@ export default function LoginPage() {
               />
             </div>
 
-            <Button type="submit" size="lg" className="w-full">
-              Sign In
+            <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
