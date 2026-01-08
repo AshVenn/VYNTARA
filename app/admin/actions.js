@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 import prisma from "@/lib/prisma"
 import { requireRole } from "@/lib/auth-guards"
 import { getCloudinaryConfig, signCloudinaryParams } from "@/lib/cloudinary"
@@ -53,9 +54,16 @@ const parseVariants = (value) => {
   }
 }
 
+const buildToastRedirect = (target, message, type = "success") => {
+  if (!target) return `/admin?toast=${message}`
+  const separator = target.includes("?") ? "&" : "?"
+  return `${target}${separator}toast=${message}&toastType=${type}`
+}
+
 export async function createCategory(formData) {
   await requireRole("ADMIN")
   const imageValue = formData.get("image") || formData.get("imageManual") || null
+  const returnTo = formData.get("returnTo")
   const payload = {
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -71,11 +79,13 @@ export async function createCategory(formData) {
   await prisma.category.create({ data: parsed.data })
   revalidatePath("/admin/categories")
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || "/admin/categories", "Category%20created"))
 }
 
 export async function updateCategory(formData) {
   await requireRole("ADMIN")
   const imageValue = formData.get("image") || formData.get("imageManual") || null
+  const returnTo = formData.get("returnTo")
   const payload = {
     id: formData.get("id"),
     name: formData.get("name"),
@@ -107,11 +117,13 @@ export async function updateCategory(formData) {
   }
   revalidatePath("/admin/categories")
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || "/admin/categories", "Category%20updated"))
 }
 
 export async function deleteCategory(formData) {
   await requireRole("ADMIN")
   const id = formData.get("id")
+  const returnTo = formData.get("returnTo")
   if (!id) {
     throw new Error("Missing category id")
   }
@@ -122,11 +134,13 @@ export async function deleteCategory(formData) {
   }
   revalidatePath("/admin/categories")
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || "/admin/categories", "Category%20deleted", "warning"))
 }
 
 export async function createProduct(formData) {
   await requireRole("ADMIN")
   const imagesValue = formData.get("images") || formData.get("imagesManual") || ""
+  const returnTo = formData.get("returnTo")
   const payload = {
     title: formData.get("title"),
     slug: formData.get("slug"),
@@ -158,11 +172,13 @@ export async function createProduct(formData) {
   })
   revalidatePath("/admin/products")
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || "/admin/products", "Product%20created"))
 }
 
 export async function updateProduct(formData) {
   await requireRole("ADMIN")
   const imagesValue = formData.get("images") || formData.get("imagesManual") || ""
+  const returnTo = formData.get("returnTo")
   const payload = {
     id: formData.get("id"),
     title: formData.get("title"),
@@ -213,11 +229,13 @@ export async function updateProduct(formData) {
   revalidatePath("/admin/products")
   revalidatePath(`/admin/products/${parsed.data.id}/edit`)
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || `/admin/products/${parsed.data.id}/edit`, "Product%20updated"))
 }
 
 export async function deleteProduct(formData) {
   await requireRole("ADMIN")
   const id = formData.get("id")
+  const returnTo = formData.get("returnTo")
   if (!id) {
     throw new Error("Missing product id")
   }
@@ -228,10 +246,12 @@ export async function deleteProduct(formData) {
   }
   revalidatePath("/admin/products")
   revalidatePath("/")
+  redirect(buildToastRedirect(returnTo || "/admin/products", "Product%20deleted", "warning"))
 }
 
 export async function updateOrderStatus(formData) {
   await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
   const payload = {
     id: formData.get("id"),
     status: formData.get("status"),
@@ -246,10 +266,12 @@ export async function updateOrderStatus(formData) {
   })
   revalidatePath(`/admin/orders/${parsed.data.id}`)
   revalidatePath("/admin/orders")
+  redirect(buildToastRedirect(returnTo || `/admin/orders/${parsed.data.id}`, "Order%20status%20updated"))
 }
 
 export async function updateOrderTracking(formData) {
   await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
   const payload = {
     id: formData.get("id"),
     trackingUrl: formData.get("trackingUrl"),
@@ -266,4 +288,5 @@ export async function updateOrderTracking(formData) {
   })
   revalidatePath(`/admin/orders/${parsed.data.id}`)
   revalidatePath("/admin/orders")
+  redirect(buildToastRedirect(returnTo || `/admin/orders/${parsed.data.id}`, "Tracking%20updated"))
 }

@@ -7,6 +7,7 @@ import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Men
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
+import AdminToastHandler from "@/components/admin/admin-toast-handler"
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -80,6 +81,7 @@ export default function AdminLayout({ children }) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        <AdminToastHandler />
         <header className="hidden lg:flex items-center justify-between border-b bg-background px-8 py-4">
           <div>
             <p className="text-sm text-muted-foreground">Admin</p>

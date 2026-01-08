@@ -171,6 +171,7 @@ export default async function AdminDashboard() {
                 </div>
                 <form action={deleteProduct}>
                   <input type="hidden" name="id" value={product.id} />
+                  <input type="hidden" name="returnTo" value="/admin" />
                   <Button type="submit" variant="outline" size="sm">
                     Delete
                   </Button>
@@ -199,6 +200,7 @@ export default async function AdminDashboard() {
                 </div>
                 <form action={deleteCategory}>
                   <input type="hidden" name="id" value={category.id} />
+                  <input type="hidden" name="returnTo" value="/admin" />
                   <Button type="submit" variant="outline" size="sm">
                     Delete
                   </Button>

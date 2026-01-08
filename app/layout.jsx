@@ -2,6 +2,8 @@ import localFont from "next/font/local"
 import "./globals.css"
 import { AppShell } from "@/components/shared/app-shell"
 import AppSessionProvider from "@/components/providers/session-provider"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
 
 const beatrice = localFont({
   src: [
@@ -106,9 +108,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${beatrice.variable} ${beatrice.className} ${beatriceDeck.variable}`}>
-        <AppSessionProvider>
-          <AppShell>{children}</AppShell>
-        </AppSessionProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+          <AppSessionProvider>
+            <AppShell>{children}</AppShell>
+          </AppSessionProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

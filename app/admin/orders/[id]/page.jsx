@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const buildTimeline = (status) => {
   const stages = ["PAID", "PRODUCTION", "SHIPPED", "DELIVERED"]
@@ -139,17 +140,18 @@ export default async function AdminOrderDetail({ params }) {
             <Badge className="mb-4">{order.status.charAt(0) + order.status.slice(1).toLowerCase()}</Badge>
             <form action={updateOrderStatus} className="space-y-3">
               <input type="hidden" name="id" value={order.id} />
-              <select
-                name="status"
-                defaultValue={order.status}
-                className="w-full border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="PAID">Paid</option>
-                <option value="PRODUCTION">Production</option>
-                <option value="SHIPPED">Shipped</option>
-                <option value="DELIVERED">Delivered</option>
-                <option value="CANCELLED">Cancelled</option>
-              </select>
+              <Select name="status" defaultValue={order.status}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PAID">Paid</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
+                  <SelectItem value="SHIPPED">Shipped</SelectItem>
+                  <SelectItem value="DELIVERED">Delivered</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
               <Button type="submit" className="w-full">
                 Update Status
               </Button>

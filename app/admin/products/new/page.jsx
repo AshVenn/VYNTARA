@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import ImageUploader from "@/components/admin/image-uploader"
 import VariantsEditor from "@/components/admin/variants-editor"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default async function NewProductPage() {
   const categories = await prisma.category.findMany({
@@ -54,22 +55,18 @@ export default async function NewProductPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="categoryId">Category</Label>
-              <select
-                id="categoryId"
-                name="categoryId"
-                className="mt-2 w-full border border-border bg-background px-3 py-2 text-sm"
-                required
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  Select a category
-                </option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+              <Select name="categoryId" defaultValue={categories[0]?.id} required>
+                <SelectTrigger id="categoryId" className="mt-2 w-full">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-end gap-2">
               <label className="flex items-center gap-2 text-sm">
