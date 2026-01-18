@@ -106,7 +106,7 @@ export default async function AdminDashboard() {
                     className={`text-sm ${
                       order.status === "DELIVERED"
                         ? "text-green-600"
-                        : order.status === "PRODUCTION"
+                        : order.status === "IN_PRODUCTION"
                           ? "text-blue-600"
                           : order.status === "SHIPPED"
                             ? "text-purple-600"

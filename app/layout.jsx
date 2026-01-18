@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shared/app-shell"
 import AppSessionProvider from "@/components/providers/session-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
+import { CartProvider } from "@/lib/cart-context"
 
 const beatrice = localFont({
   src: [
@@ -106,13 +107,15 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${beatrice.variable} ${beatrice.className} ${beatriceDeck.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <AppSessionProvider>
-            <AppShell>{children}</AppShell>
-          </AppSessionProvider>
-          <Toaster />
+          <CartProvider>
+            <AppSessionProvider>
+              <AppShell>{children}</AppShell>
+            </AppSessionProvider>
+          </CartProvider>
+          <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
     </html>

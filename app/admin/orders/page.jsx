@@ -6,6 +6,10 @@ export default async function AdminOrders() {
     include: {
       user: true,
       items: true,
+      shipments: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -18,6 +22,8 @@ export default async function AdminOrders() {
     itemsCount: order.items.reduce((sum, item) => sum + item.qty, 0),
     totalCents: order.totalCents,
     status: order.status,
+    fulfillmentStatus: order.fulfillmentStatus,
+    hasLabel: !!order.shipments[0]?.labelUrl,
   }))
 
   return (

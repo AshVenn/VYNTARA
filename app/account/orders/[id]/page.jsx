@@ -2,20 +2,46 @@ import Link from "next/link"
 import Image from "next/image"
 import { notFound } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { OrderTimeline } from "@/components/account/order-timeline"
 import { formatMoney } from "@/lib/utils"
 import { ChevronLeft, ExternalLink } from "lucide-react"
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { markAddressUpdated } from "@/app/actions/orders"
 
-const buildTimeline = (status, createdAt) => {
-  const stages = ["PAID", "PRODUCTION", "SHIPPED", "DELIVERED"]
-  return stages.map((stage) => ({
-    label: stage.charAt(0) + stage.slice(1).toLowerCase(),
-    date: new Date(createdAt).toLocaleDateString("en-US"),
-    completed: stages.indexOf(stage) <= stages.indexOf(status),
-  }))
+const formatTimelineDate = (value) => {
+  if (!value) return ""
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+const orderEventLabels = {
+  ORDER_PLACED: "Order placed",
+  PAID: "Payment confirmed",
+  IN_PRODUCTION: "In production",
+  LABEL_PURCHASED: "Label purchased",
+  SHIPPED: "Handed to carrier",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+  NOTE: "Update",
+  EXCEPTION: "Delivery issue",
+}
+
+const mapOrderEvent = (event) => ({
+  label: orderEventLabels[event.type] || event.type,
+  date: formatTimelineDate(event.createdAt),
+  message: event.message || null,
+})
+
+const resolveParamId = async (params) => {
+  const resolvedParams =
+    params && typeof params.then === "function" ? await params : params
+  return resolvedParams?.id
 }
 
 export default async function OrderDetailPage({ params }) {
@@ -24,8 +50,13 @@ export default async function OrderDetailPage({ params }) {
     notFound()
   }
 
+  const id = await resolveParamId(params)
+  if (!id) {
+    notFound()
+  }
+
   const order = await prisma.order.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
     include: {
       items: {
         include: {
@@ -33,7 +64,18 @@ export default async function OrderDetailPage({ params }) {
           variant: true,
         },
       },
-      user: { include: { addresses: true } },
+      shippingAddress: true,
+      events: {
+        orderBy: { createdAt: "asc" },
+      },
+      shipments: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          events: {
+            orderBy: { occurredAt: "asc" },
+          },
+        },
+      },
     },
   })
 
@@ -41,8 +83,22 @@ export default async function OrderDetailPage({ params }) {
     notFound()
   }
 
-  const timelineEvents = buildTimeline(order.status, order.createdAt)
-  const shippingAddress = order.user.addresses[0]
+  const timelineEvents = order.events.length
+    ? order.events.map(mapOrderEvent)
+    : [
+        {
+          label: "Order placed",
+          date: formatTimelineDate(order.createdAt),
+          message: null,
+        },
+      ]
+  const shipment = order.shipments[0]
+  const trackingUrl = order.trackingUrl || shipment?.trackingUrl
+  const trackingEvents = shipment?.events || []
+  const shippingAddress = order.shippingAddress
+  const addressStatus = order.addressValidationStatus || "UNVALIDATED"
+  const addressError = order.addressValidationError
+  const addressNote = order.addressValidationNote
 
   return (
     <div className="space-y-6">
@@ -76,10 +132,18 @@ export default async function OrderDetailPage({ params }) {
         <div className="grid md:grid-cols-2 gap-8 mb-8">
           <div>
             <h2 className="font-semibold mb-4">Order Timeline</h2>
-            <OrderTimeline events={timelineEvents} />
-            {order.trackingUrl && (
+            <div className="space-y-4">
+              {timelineEvents.map((event, index) => (
+                <div key={`${event.label}-${index}`} className="border border-border rounded-md p-3">
+                  <p className="font-medium">{event.label}</p>
+                  <p className="text-sm text-muted-foreground">{event.date}</p>
+                  {event.message ? <p className="text-sm text-muted-foreground mt-1">{event.message}</p> : null}
+                </div>
+              ))}
+            </div>
+            {trackingUrl && (
               <Button variant="outline" size="sm" className="mt-4 bg-transparent" asChild>
-                <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer">
+                <a href={trackingUrl} target="_blank" rel="noopener noreferrer">
                   Track Shipment
                   <ExternalLink className="ml-2 h-4 w-4" />
                 </a>
@@ -89,6 +153,29 @@ export default async function OrderDetailPage({ params }) {
 
           <div>
             <h2 className="font-semibold mb-4">Shipping Address</h2>
+            {addressStatus === "INVALID" && (
+              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                <p className="font-medium text-destructive">Address needs attention</p>
+                <p className="text-muted-foreground">
+                  {addressError || "Please review your address details and update them if needed."}
+                </p>
+                {addressNote && <p className="text-muted-foreground mt-2">{addressNote}</p>}
+                <form action={markAddressUpdated} className="mt-3">
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <Button type="submit" size="sm" variant="outline" className="bg-transparent">
+                    I updated my address
+                  </Button>
+                </form>
+              </div>
+            )}
+            {addressStatus === "CLIENT_UPDATED" && (
+              <div className="mb-4 rounded-lg border border-border bg-muted/50 p-3 text-sm">
+                <p className="font-medium">Address update sent</p>
+                <p className="text-muted-foreground">
+                  We are rechecking your address and will update the order soon.
+                </p>
+              </div>
+            )}
             {shippingAddress ? (
               <div className="text-sm space-y-1">
                 <p className="font-medium">{shippingAddress.fullName}</p>
@@ -154,6 +241,24 @@ export default async function OrderDetailPage({ params }) {
                 <span>{formatMoney(order.totalCents / 100)}</span>
               </div>
             </div>
+          </div>
+
+          <div className="border-t border-border pt-6 mt-6">
+            <h2 className="font-semibold mb-4">Tracking History</h2>
+            {trackingEvents.length > 0 ? (
+              <div className="space-y-3">
+                {trackingEvents.map((event) => (
+                  <div key={event.id} className="text-sm border border-border rounded-md p-3">
+                    <p className="font-medium">{event.status || "Update"}</p>
+                    {event.details ? <p className="text-muted-foreground">{event.details}</p> : null}
+                    <p className="text-muted-foreground">{formatTimelineDate(event.occurredAt || event.createdAt)}</p>
+                    {event.location ? <p className="text-muted-foreground">{event.location}</p> : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Tracking updates will appear once the carrier scans the package.</p>
+            )}
           </div>
         </div>
       </div>

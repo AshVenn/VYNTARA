@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { ProductCard } from "@/components/shared/product-card"
+import ProductCardWithCart from "@/components/products/product-card-with-cart"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -264,7 +264,7 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               {filteredProducts.map((product) => (
-                <ProductCard
+                <ProductCardWithCart
                   key={product.id}
                   product={product}
                   isFavorite={favoriteIds.includes(product.id)}

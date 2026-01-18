@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation"
 import { DataTable } from "@/components/admin/data-table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Search, Package } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FulfillmentStatusBadge } from "@/components/admin/fulfillment-status-badge"
 
 export default function OrdersTable({ orders }) {
   const [searchQuery, setSearchQuery] = useState("")
@@ -55,7 +57,7 @@ export default function OrdersTable({ orders }) {
       cell: (row) => {
         const statusColors = {
           PAID: "secondary",
-          PRODUCTION: "default",
+          IN_PRODUCTION: "default",
           SHIPPED: "default",
           DELIVERED: "default",
           CANCELLED: "destructive",
@@ -65,6 +67,34 @@ export default function OrdersTable({ orders }) {
             {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
           </Badge>
         )
+      },
+    },
+    {
+      header: "Fulfillment",
+      accessorKey: "fulfillmentStatus",
+      cell: (row) => <FulfillmentStatusBadge status={row.fulfillmentStatus} size="sm" />,
+    },
+    {
+      header: "",
+      accessorKey: "actions",
+      cell: (row) => {
+        if (row.fulfillmentStatus === "UNFULFILLED" || row.fulfillmentStatus === "IN_PROGRESS") {
+          return (
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-transparent"
+              onClick={(e) => {
+                e.stopPropagation()
+                router.push(`/admin/orders/${row.id}`)
+              }}
+            >
+              <Package className="w-4 h-4 mr-1" />
+              Fulfill
+            </Button>
+          )
+        }
+        return null
       },
     },
   ]
@@ -82,13 +112,13 @@ export default function OrdersTable({ orders }) {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-45">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Orders</SelectItem>
             <SelectItem value="PAID">Paid</SelectItem>
-            <SelectItem value="PRODUCTION">Production</SelectItem>
+            <SelectItem value="IN_PRODUCTION">Production</SelectItem>
             <SelectItem value="SHIPPED">Shipped</SelectItem>
             <SelectItem value="DELIVERED">Delivered</SelectItem>
             <SelectItem value="CANCELLED">Cancelled</SelectItem>

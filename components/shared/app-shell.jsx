@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation"
 import { ShoppingBag, Heart, User, Search, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
+import { useCart } from "@/lib/cart-context"
 
 export function AppShell({ children }) {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { itemCount, isLoaded } = useCart()
 
   // Hide header/footer on admin and account routes
   const isAdminRoute = pathname?.startsWith("/admin")
@@ -22,7 +24,7 @@ export function AppShell({ children }) {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* Mobile menu button */}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -76,10 +78,12 @@ export function AppShell({ children }) {
             <Button variant="ghost" size="icon" className="relative" asChild>
               <Link href="/cart">
                 <ShoppingBag className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-                  2
-                </span>
-                <span className="sr-only">Cart</span>
+                {isLoaded && itemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
+                    {itemCount > 99 ? "99+" : itemCount}
+                  </span>
+                )}
+                <span className="sr-only">Cart ({itemCount} items)</span>
               </Link>
             </Button>
           </div>

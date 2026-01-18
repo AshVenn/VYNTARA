@@ -13,14 +13,17 @@ import { getCartItems, setCartItems } from "@/lib/cart"
 export default function CartPage() {
   const [cartItems, setCartItemsState] = useState([])
   const [couponCode, setCouponCode] = useState("")
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   useEffect(() => {
     setCartItemsState(getCartItems())
+    setHasLoaded(true)
   }, [])
 
   useEffect(() => {
+    if (!hasLoaded) return
     setCartItems(cartItems)
-  }, [cartItems])
+  }, [cartItems, hasLoaded])
 
   const updateQuantity = (itemId, newQty) => {
     if (newQty < 1) return

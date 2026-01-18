@@ -1,15 +1,17 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ProductCard } from "@/components/shared/product-card"
 import { formatMoney } from "@/lib/utils"
-import { Heart, Truck, Shield, RotateCcw, Star, ChevronLeft, ChevronRight } from "lucide-react"
+import { Heart, Truck, Shield, RotateCcw, Star, ChevronLeft, ChevronRight, ShoppingBag, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { addCartItem } from "@/lib/cart"
+import { useCart } from "@/lib/cart-context"
 import FavoriteButton from "@/components/shared/favorite-button"
+import { toast } from "sonner"
+import { addCartItem } from "@/lib/cart-actions" // Declare the variable here
 
 export default function ProductDetailClient({ product, relatedProducts, isFavorite, canFavorite }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
@@ -17,6 +19,7 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
   const [selectedColor, setSelectedColor] = useState(null)
   const [selectedFit, setSelectedFit] = useState(null)
   const [quantity, setQuantity] = useState(1)
+  const { addItem } = useCart()
 
   const getAvailableVariants = () =>
     product.variants.filter((variant) => {
@@ -40,11 +43,11 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
 
   const handleAddToCart = () => {
     if (!selectedSize || !selectedColor || !selectedFit || !currentVariant) {
-      alert("Please select size, color, and fit")
+      toast.error("Please select size, color, and fit")
       return
     }
 
-    addCartItem({
+    addItem({
       id: `${product.id}-${currentVariant.id}`,
       productId: product.id,
       variantId: currentVariant.id,
@@ -58,7 +61,13 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
       price: price,
       qty: quantity,
     })
-    alert("Added to cart")
+    toast.success("Added to cart", {
+      description: `${product.title} - ${currentVariant.color} / ${currentVariant.size}`,
+      action: {
+        label: "View Cart",
+        onClick: () => window.location.href = "/cart"
+      }
+    })
   }
 
   const nextImage = () => {
@@ -85,7 +94,7 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
 
         <div className="grid md:grid-cols-2 gap-12 mb-16">
           <div>
-            <div className="aspect-[3/4] bg-muted overflow-hidden mb-4 relative group">
+            <div className="aspect-3/4 bg-muted overflow-hidden mb-4 relative group">
               <Image
                 src={product.images[selectedImageIndex] || "/placeholder.svg"}
                 alt={product.title}

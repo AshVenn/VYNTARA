@@ -155,8 +155,12 @@ async function main() {
   }
 
   await prisma.favorite.deleteMany()
+  await prisma.shipmentEvent.deleteMany()
+  await prisma.shipment.deleteMany()
+  await prisma.orderEvent.deleteMany()
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  await prisma.address.deleteMany()
   await prisma.productVariant.deleteMany()
   await prisma.product.deleteMany()
   await prisma.category.deleteMany()
@@ -260,6 +264,44 @@ async function main() {
     take: 2,
   })
 
+  const addressTemplates = [
+    {
+      label: "Home",
+      fullName: "Jordan Blake",
+      phone: "555-0100",
+      line1: "123 Maple Street",
+      line2: "Unit 4A",
+      city: "Austin",
+      region: "TX",
+      postalCode: "78701",
+      country: "US",
+    },
+    {
+      label: "Studio",
+      fullName: "Riley Chen",
+      phone: "555-0124",
+      line1: "456 Market Avenue",
+      line2: null,
+      city: "San Francisco",
+      region: "CA",
+      postalCode: "94105",
+      country: "US",
+    },
+  ]
+
+  const addressMap = new Map()
+  for (let i = 0; i < users.length; i += 1) {
+    const user = users[i]
+    const template = addressTemplates[i % addressTemplates.length]
+    const created = await prisma.address.create({
+      data: {
+        userId: user.id,
+        ...template,
+      },
+    })
+    addressMap.set(user.id, created.id)
+  }
+
   const products = await prisma.product.findMany({
     include: { variants: true },
     take: 6,
@@ -267,10 +309,54 @@ async function main() {
 
   const demoOrderData = [
     { status: "SHIPPED", trackingUrl: "https://tracking.example.com/demo-1" },
-    { status: "PRODUCTION", trackingUrl: null },
+    {
+      status: "IN_PRODUCTION",
+      trackingUrl: null,
+      addressValidationStatus: "INVALID",
+      addressValidationError: "Street address appears incomplete (missing unit or suite).",
+      addressValidationNote: "Please add apartment/suite number or confirm the full address.",
+    },
     { status: "DELIVERED", trackingUrl: "https://tracking.example.com/demo-2" },
     { status: "CANCELLED", trackingUrl: null },
   ]
+
+  const resolveFulfillmentStatus = (status) => {
+    switch (status) {
+      case "DELIVERED":
+        return "DELIVERED"
+      case "SHIPPED":
+        return "HANDED_TO_CARRIER"
+      case "IN_PRODUCTION":
+        return "IN_PROGRESS"
+      case "CANCELLED":
+        return "EXCEPTION"
+      default:
+        return "UNFULFILLED"
+    }
+  }
+
+  const buildOrderEvents = (status) => {
+    const events = [
+      { type: "ORDER_PLACED", message: "Order placed" },
+      { type: "PAID", message: "Payment confirmed" },
+    ]
+
+    if (status === "IN_PRODUCTION" || status === "SHIPPED" || status === "DELIVERED") {
+      events.push({ type: "IN_PRODUCTION", message: "Order in production" })
+    }
+    if (status === "SHIPPED" || status === "DELIVERED") {
+      events.push({ type: "LABEL_PURCHASED", message: "Shipping label purchased" })
+      events.push({ type: "SHIPPED", message: "Handed to carrier" })
+    }
+    if (status === "DELIVERED") {
+      events.push({ type: "DELIVERED", message: "Delivered" })
+    }
+    if (status === "CANCELLED") {
+      events.push({ type: "CANCELLED", message: "Order cancelled" })
+    }
+
+    return events
+  }
 
   for (let i = 0; i < users.length; i += 1) {
     const user = users[i]
@@ -295,11 +381,16 @@ async function main() {
       const taxCents = Math.round(subtotalCents * 0.09)
       const totalCents = subtotalCents + shippingCents + taxCents
 
-      await prisma.order.create({
+      const order = await prisma.order.create({
         data: {
           userId: user.id,
           status: orderConfig.status,
+          fulfillmentStatus: resolveFulfillmentStatus(orderConfig.status),
+          addressValidationStatus: orderConfig.addressValidationStatus || "UNVALIDATED",
+          addressValidationError: orderConfig.addressValidationError || null,
+          addressValidationNote: orderConfig.addressValidationNote || null,
           trackingUrl: orderConfig.trackingUrl,
+          shippingAddressId: addressMap.get(user.id) || null,
           subtotalCents,
           shippingCents,
           taxCents,
@@ -307,8 +398,49 @@ async function main() {
           items: {
             create: items,
           },
+          events: {
+            create: buildOrderEvents(orderConfig.status),
+          },
         },
       })
+
+      if (orderConfig.status === "SHIPPED" || orderConfig.status === "DELIVERED") {
+        const shipment = await prisma.shipment.create({
+          data: {
+            orderId: order.id,
+            shippoShipmentId: `shippo_shp_${order.id.slice(-8)}`,
+            shippoTransactionId: `shippo_txn_${order.id.slice(-8)}`,
+            labelUrl: "https://labels.example.com/demo-label.pdf",
+            trackingNumber: `1Z${order.id.slice(-8).toUpperCase()}`,
+            trackingUrl: orderConfig.trackingUrl,
+            carrier: "USPS",
+            service: "Priority",
+            rateCents: 1200,
+            status: orderConfig.status === "DELIVERED" ? "DELIVERED" : "TRANSIT",
+          },
+        })
+
+        await prisma.shipmentEvent.createMany({
+          data: [
+            {
+              shipmentId: shipment.id,
+              eventId: `evt_${shipment.id.slice(-6)}_pickup`,
+              status: "TRANSIT",
+              details: "Shipment picked up",
+              location: "Austin, TX",
+              occurredAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
+            },
+            {
+              shipmentId: shipment.id,
+              eventId: `evt_${shipment.id.slice(-6)}_delivery`,
+              status: orderConfig.status === "DELIVERED" ? "DELIVERED" : "TRANSIT",
+              details: orderConfig.status === "DELIVERED" ? "Delivered" : "In transit",
+              location: "Austin, TX",
+              occurredAt: new Date(),
+            },
+          ],
+        })
+      }
     }
   }
 

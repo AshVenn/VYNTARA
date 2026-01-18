@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import prisma from "@/lib/prisma"
 import { requireRole } from "@/lib/auth-guards"
 import { getCloudinaryConfig, signCloudinaryParams } from "@/lib/cloudinary"
+import { z } from "zod"
 import {
   categorySchema,
   productSchema,
@@ -12,6 +13,8 @@ import {
   orderStatusSchema,
   orderTrackingSchema,
 } from "@/lib/validators/admin"
+import { orderIdSchema, ratePurchaseSchema, shipmentActionSchema } from "@/lib/validators/shippo"
+import { buyLabel, createShipment, getShippoAddressFromEnv, validateAddress, trackShipment } from "@/lib/shippo"
 
 const parseList = (value) =>
   value
@@ -40,6 +43,9 @@ const deleteCloudinaryImage = async (publicId) => {
       body: formData,
     })
   } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
     console.error(error)
   }
 }
@@ -58,6 +64,33 @@ const buildToastRedirect = (target, message, type = "success") => {
   if (!target) return `/admin?toast=${message}`
   const separator = target.includes("?") ? "&" : "?"
   return `${target}${separator}toast=${message}&toastType=${type}`
+}
+
+const toToastMessage = (message, fallback = "Something went wrong") =>
+  encodeURIComponent(message || fallback)
+
+const isRedirect = (error) => {
+  if (!error) return false
+  const digest = typeof error === "object" ? error.digest : null
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")
+}
+
+const buildShippoAddressTo = (order) => {
+  const address = order.shippingAddress
+  if (!address) {
+    throw new Error("Order is missing a shipping address.")
+  }
+  return {
+    name: address.fullName,
+    street1: address.line1,
+    street2: address.line2 || undefined,
+    city: address.city,
+    state: address.region,
+    zip: address.postalCode,
+    country: address.country,
+    phone: address.phone || undefined,
+    email: order.user?.email || undefined,
+  }
 }
 
 export async function createCategory(formData) {
@@ -289,4 +322,502 @@ export async function updateOrderTracking(formData) {
   revalidatePath(`/admin/orders/${parsed.data.id}`)
   revalidatePath("/admin/orders")
   redirect(buildToastRedirect(returnTo || `/admin/orders/${parsed.data.id}`, "Tracking%20updated"))
+}
+
+export async function validateOrderAddress(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+    }
+    const parsed = orderIdSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid order id")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        user: true,
+        shippingAddress: true,
+      },
+    })
+
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const addressTo = buildShippoAddressTo(order)
+    const response = await validateAddress(addressTo)
+    const isValid = response?.validation_results?.is_valid
+    const messages = response?.validation_results?.messages || []
+    const validationError =
+      messages.find((message) => message.type === "error")?.text ||
+      messages[0]?.text ||
+      "Check address fields."
+
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          addressValidationStatus: isValid ? "VALID" : "INVALID",
+          addressValidationError: isValid ? null : validationError,
+          addressValidationNote: isValid ? null : order.addressValidationNote,
+        },
+      }),
+      prisma.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: isValid ? "NOTE" : "EXCEPTION",
+          message: isValid
+            ? "Address validated successfully."
+            : `Address validation failed: ${validationError}`,
+        },
+      }),
+    ])
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    revalidatePath(`/account/orders/${order.id}`)
+    const toastMessage = isValid ? "Address%20validated" : "Address%20invalid"
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, toastMessage, isValid ? "success" : "warning"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Address validation failed"),
+        "error",
+      ),
+    )
+  }
+}
+
+export async function updateAddressValidationStatus(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+      status: formData.get("status"),
+      note: formData.get("note"),
+    }
+    const parsed = z
+      .object({
+        orderId: z.string().min(1),
+        status: z.enum(["UNVALIDATED", "VALID", "INVALID", "CLIENT_UPDATED"]),
+        note: z.string().max(500).optional().nullable(),
+      })
+      .safeParse(payload)
+
+    if (!parsed.success) {
+      throw new Error("Invalid address validation update")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: { shippingAddress: true },
+    })
+
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const note = parsed.data.note?.trim() || null
+    const status = parsed.data.status
+
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          addressValidationStatus: status,
+          addressValidationNote: note,
+        },
+      }),
+      prisma.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: status === "INVALID" ? "EXCEPTION" : "NOTE",
+          message: note
+            ? `Address validation status updated: ${status}. Note: ${note}`
+            : `Address validation status updated: ${status}.`,
+        },
+      }),
+    ])
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    revalidatePath(`/account/orders/${order.id}`)
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Address%20status%20updated"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to update address status"),
+        "error",
+      ),
+    )
+  }
+}
+
+export async function getShippingRates(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+    }
+    const parsed = orderIdSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid order id")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        user: true,
+        items: true,
+        shippingAddress: true,
+        shipments: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    })
+
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const addressFrom = getShippoAddressFromEnv()
+    const addressTo = buildShippoAddressTo(order)
+    const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0)
+    const weight = Math.max(1, totalQty)
+    const parcels = [
+      {
+        length: "12",
+        width: "9",
+        height: "2",
+        distance_unit: "in",
+        weight: String(weight),
+        mass_unit: "lb",
+      },
+    ]
+
+    const shipmentResponse = await createShipment({
+      addressFrom,
+      addressTo,
+      parcels,
+    })
+
+    const rates = Array.isArray(shipmentResponse?.rates) ? shipmentResponse.rates : []
+    const latestShipment = order.shipments[0]
+
+    if (latestShipment && !latestShipment.shippoTransactionId) {
+      await prisma.shipment.update({
+        where: { id: latestShipment.id },
+        data: {
+          shippoShipmentId: shipmentResponse.object_id,
+          status: shipmentResponse.status || "RATES_READY",
+          rates,
+        },
+      })
+    } else {
+      await prisma.shipment.create({
+        data: {
+          orderId: order.id,
+          shippoShipmentId: shipmentResponse.object_id,
+          status: shipmentResponse.status || "RATES_READY",
+          rates,
+        },
+      })
+    }
+
+    await prisma.orderEvent.create({
+      data: {
+        orderId: order.id,
+        type: "NOTE",
+        message: "Shipping rates fetched.",
+      },
+    })
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Rates%20updated"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to fetch rates"),
+        "error",
+      ),
+    )
+  }
+}
+
+export async function buyShippingLabel(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+      rateId: formData.get("rateId"),
+      shipmentId: formData.get("shipmentId") || null,
+    }
+    const parsed = ratePurchaseSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid label request")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        shipments: { orderBy: { createdAt: "desc" } },
+      },
+    })
+
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const targetShipmentId = parsed.data.shipmentId || order.shipments[0]?.id
+    if (!targetShipmentId) {
+      throw new Error("No shipment available to purchase a label.")
+    }
+
+    const transaction = await buyLabel({ rateId: parsed.data.rateId })
+    const rate = transaction?.rate || {}
+    const rateCents = rate?.amount ? Math.round(Number(rate.amount) * 100) : null
+
+    await prisma.$transaction([
+      prisma.shipment.update({
+        where: { id: targetShipmentId },
+        data: {
+          shippoTransactionId: transaction.object_id,
+          labelUrl: transaction.label_url,
+          trackingNumber: transaction.tracking_number,
+          trackingUrl: transaction.tracking_url_provider || transaction.tracking_url || null,
+          carrier: rate.provider || transaction.carrier || null,
+          service: rate.servicelevel?.name || rate.servicelevel?.token || null,
+          rateCents,
+          status: transaction.status || "PURCHASED",
+        },
+      }),
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: "SHIPPED",
+          fulfillmentStatus: "LABEL_PURCHASED",
+          trackingUrl: transaction.tracking_url_provider || transaction.tracking_url || undefined,
+        },
+      }),
+      prisma.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "LABEL_PURCHASED",
+          message: "Shipping label purchased.",
+        },
+      }),
+    ])
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    revalidatePath("/admin/orders")
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Label%20purchased"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to buy label"),
+        "error",
+      ),
+    )
+  }
+}
+
+export async function markHandedToCarrier(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+      shipmentId: formData.get("shipmentId") || null,
+    }
+    const parsed = shipmentActionSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid order id")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        shipments: { orderBy: { createdAt: "desc" } },
+      },
+    })
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const shipmentId = parsed.data.shipmentId || order.shipments[0]?.id
+
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: "SHIPPED",
+          fulfillmentStatus: "HANDED_TO_CARRIER",
+        },
+      }),
+      prisma.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "SHIPPED",
+          message: "Handed to carrier.",
+        },
+      }),
+      shipmentId
+        ? prisma.shipment.update({
+            where: { id: shipmentId },
+            data: { status: "TRANSIT" },
+          })
+        : prisma.shipment.findMany({ take: 0 }),
+    ])
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    revalidatePath("/admin/orders")
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Marked%20as%20handed%20to%20carrier"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to update fulfillment"),
+        "error",
+      ),
+    )
+  }
+}
+
+export async function refreshTracking(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+      shipmentId: formData.get("shipmentId") || null,
+    }
+    const parsed = shipmentActionSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid order id")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        shipments: {
+          orderBy: { createdAt: "desc" },
+          include: { events: true },
+        },
+      },
+    })
+
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const shipment = order.shipments.find((s) => s.id === parsed.data.shipmentId) || order.shipments[0]
+    if (!shipment?.trackingNumber || !shipment?.carrier) {
+      throw new Error("No tracking information available")
+    }
+
+    const trackingData = await trackShipment({
+      carrier: shipment.carrier.toLowerCase(),
+      trackingNumber: shipment.trackingNumber,
+    })
+
+    const trackingStatus = trackingData?.tracking_status
+    const trackingHistory = trackingData?.tracking_history || []
+
+    const updates = []
+
+    if (trackingStatus) {
+      const status = trackingStatus.status?.toUpperCase() || "UNKNOWN"
+      updates.push(
+        prisma.shipment.update({
+          where: { id: shipment.id },
+          data: {
+            status,
+            trackingUrl: trackingData.tracking_url_provider || shipment.trackingUrl,
+          },
+        })
+      )
+
+      if (status.includes("DELIVERED")) {
+        updates.push(
+          prisma.order.update({
+            where: { id: order.id },
+            data: {
+              status: "DELIVERED",
+              fulfillmentStatus: "DELIVERED",
+            },
+          })
+        )
+      }
+    }
+
+    for (const event of trackingHistory) {
+      const eventId = event.object_id || `${shipment.trackingNumber}-${event.status_date}`
+      const existingEvent = shipment.events.find((e) => e.eventId === eventId)
+      if (!existingEvent) {
+        updates.push(
+          prisma.shipmentEvent.create({
+            data: {
+              shipmentId: shipment.id,
+              eventId,
+              status: event.status?.toUpperCase() || "UNKNOWN",
+              details: event.status_details || null,
+              location: event.location
+                ? [event.location.city, event.location.state, event.location.country].filter(Boolean).join(", ")
+                : null,
+              occurredAt: event.status_date ? new Date(event.status_date) : new Date(),
+              rawPayload: event,
+            },
+          })
+        )
+      }
+    }
+
+    if (updates.length > 0) {
+      await prisma.$transaction(updates)
+    }
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Tracking%20refreshed"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to refresh tracking"),
+        "error",
+      ),
+    )
+  }
 }
