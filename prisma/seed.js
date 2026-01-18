@@ -444,7 +444,10 @@ async function main() {
     }
   }
 
-  const favoriteTargets = products.slice(0, 4)
+  const favoriteTargets = await prisma.product.findMany({
+    select: { id: true },
+    take: 4,
+  })
   for (const user of users) {
     for (const product of favoriteTargets) {
       await prisma.favorite.upsert({
