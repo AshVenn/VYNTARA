@@ -3,7 +3,7 @@ import Image from "next/image"
 import { formatMoney } from "@/lib/utils"
 import FavoriteButton from "@/components/shared/favorite-button"
 
-export function ProductCard({ product, isFavorite = false, canFavorite = false }) {
+export function ProductCard({ product, isFavorite = false, canFavorite = false, imagePriority = false }) {
   const variants = product.variants || []
   const variantPrices = variants.map((variant) =>
     typeof variant.price === "number" ? variant.price : variant.priceCents / 100,
@@ -19,6 +19,7 @@ export function ProductCard({ product, isFavorite = false, canFavorite = false }
             alt={product.title}
             width={400}
             height={533}
+            priority={imagePriority}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
         </div>

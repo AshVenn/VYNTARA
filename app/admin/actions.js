@@ -10,6 +10,7 @@ import {
   categorySchema,
   productSchema,
   productVariantSchema,
+  couponSchema,
   orderStatusSchema,
   orderTrackingSchema,
 } from "@/lib/validators/admin"
@@ -58,6 +59,13 @@ const parseVariants = (value) => {
   } catch (error) {
     return []
   }
+}
+
+const parseDiscountValue = (discountType, value) => {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return null
+  if (discountType === "PERCENT") return Math.round(amount)
+  return Math.round(amount * 100)
 }
 
 const buildToastRedirect = (target, message, type = "success") => {
@@ -280,6 +288,69 @@ export async function deleteProduct(formData) {
   revalidatePath("/admin/products")
   revalidatePath("/")
   redirect(buildToastRedirect(returnTo || "/admin/products", "Product%20deleted", "warning"))
+}
+
+export async function createCoupon(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  const payload = {
+    code: String(formData.get("code") || "").trim().toUpperCase(),
+    description: formData.get("description") || null,
+    discountType: formData.get("discountType"),
+    discountValue: parseDiscountValue(formData.get("discountType"), formData.get("discountValue")),
+    isActive: formData.get("isActive") === "on",
+  }
+  const parsed = couponSchema.safeParse(payload)
+  if (!parsed.success) {
+    throw new Error("Invalid coupon data")
+  }
+
+  await prisma.coupon.create({ data: parsed.data })
+  revalidatePath("/admin/coupons")
+  redirect(buildToastRedirect(returnTo || "/admin/coupons", "Coupon%20created"))
+}
+
+export async function updateCoupon(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  const payload = {
+    id: formData.get("id"),
+    code: String(formData.get("code") || "").trim().toUpperCase(),
+    description: formData.get("description") || null,
+    discountType: formData.get("discountType"),
+    discountValue: parseDiscountValue(formData.get("discountType"), formData.get("discountValue")),
+    isActive: formData.get("isActive") === "on",
+  }
+  const parsed = couponSchema.safeParse(payload)
+  if (!parsed.success || !parsed.data.id) {
+    throw new Error("Invalid coupon data")
+  }
+
+  await prisma.coupon.update({
+    where: { id: parsed.data.id },
+    data: {
+      code: parsed.data.code,
+      description: parsed.data.description,
+      discountType: parsed.data.discountType,
+      discountValue: parsed.data.discountValue,
+      isActive: parsed.data.isActive,
+    },
+  })
+  revalidatePath("/admin/coupons")
+  redirect(buildToastRedirect(returnTo || "/admin/coupons", "Coupon%20updated"))
+}
+
+export async function deleteCoupon(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  const id = formData.get("id")
+  if (!id) {
+    throw new Error("Missing coupon id")
+  }
+
+  await prisma.coupon.delete({ where: { id } })
+  revalidatePath("/admin/coupons")
+  redirect(buildToastRedirect(returnTo || "/admin/coupons", "Coupon%20deleted", "warning"))
 }
 
 export async function updateOrderStatus(formData) {

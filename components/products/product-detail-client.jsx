@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/button"
 import { ProductCard } from "@/components/shared/product-card"
 import { formatMoney } from "@/lib/utils"
 import { Heart, Truck, Shield, RotateCcw, Star, ChevronLeft, ChevronRight, ShoppingBag, Check } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useCart } from "@/lib/cart-context"
 import FavoriteButton from "@/components/shared/favorite-button"
 import { toast } from "sonner"
-import { addCartItem } from "@/lib/cart-actions" // Declare the variable here
 
 export default function ProductDetailClient({ product, relatedProducts, isFavorite, canFavorite }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
@@ -21,21 +20,45 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
   const [quantity, setQuantity] = useState(1)
   const { addItem } = useCart()
 
-  const getAvailableVariants = () =>
-    product.variants.filter((variant) => {
-      if (selectedColor && variant.color !== selectedColor) return false
-      if (selectedSize && variant.size !== selectedSize) return false
-      if (selectedFit && variant.fit !== selectedFit) return false
-      return variant.available
-    })
-
   const currentVariant = product.variants.find(
     (variant) => variant.size === selectedSize && variant.color === selectedColor && variant.fit === selectedFit,
   )
 
-  const availableColors = [...new Set(product.variants.filter((v) => v.available).map((v) => v.color))]
-  const availableSizes = [...new Set(getAvailableVariants().map((v) => v.size))]
-  const availableFits = [...new Set(getAvailableVariants().map((v) => v.fit))]
+  const availableColors = [
+    ...new Set(
+      product.variants
+        .filter((variant) =>
+          variant.available &&
+          (!selectedSize || variant.size === selectedSize) &&
+          (!selectedFit || variant.fit === selectedFit)
+        )
+        .map((variant) => variant.color),
+    ),
+  ]
+
+  const availableSizes = [
+    ...new Set(
+      product.variants
+        .filter((variant) =>
+          variant.available &&
+          (!selectedColor || variant.color === selectedColor) &&
+          (!selectedFit || variant.fit === selectedFit)
+        )
+        .map((variant) => variant.size),
+    ),
+  ]
+
+  const availableFits = [
+    ...new Set(
+      product.variants
+        .filter((variant) =>
+          variant.available &&
+          (!selectedColor || variant.color === selectedColor) &&
+          (!selectedSize || variant.size === selectedSize)
+        )
+        .map((variant) => variant.fit),
+    ),
+  ]
 
   const price = currentVariant
     ? currentVariant.priceCents / 100
@@ -194,6 +217,7 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Size Guide</DialogTitle>
+                      <DialogDescription>Find the best fit using our size chart.</DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
                       <table className="w-full text-sm">
@@ -305,14 +329,6 @@ export default function ProductDetailClient({ product, relatedProducts, isFavori
             </div>
 
             <div className="space-y-3 text-sm border-t border-border pt-6">
-              <div className="flex items-center gap-3">
-                <Truck className="h-5 w-5 text-muted-foreground" />
-                <span>Free shipping on orders over $100</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <RotateCcw className="h-5 w-5 text-muted-foreground" />
-                <span>30-day returns & exchanges</span>
-              </div>
               <div className="flex items-center gap-3">
                 <Shield className="h-5 w-5 text-muted-foreground" />
                 <span>Secure checkout</span>

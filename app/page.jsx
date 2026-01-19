@@ -84,12 +84,13 @@ export default async function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {featuredProducts.map((product) => (
+          {featuredProducts.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
               isFavorite={favoriteIds.includes(product.id)}
               canFavorite={canFavorite}
+              imagePriority={index < 4}
             />
           ))}
         </div>
@@ -114,12 +115,13 @@ export default async function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {bestSellers.map((product) => (
+          {bestSellers.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
               isFavorite={favoriteIds.includes(product.id)}
               canFavorite={canFavorite}
+              imagePriority={index < 4}
             />
           ))}
         </div>

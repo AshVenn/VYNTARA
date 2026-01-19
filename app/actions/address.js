@@ -21,12 +21,19 @@ const addressSchema = z.object({
 })
 
 export async function getUserAddresses() {
-  const session = await requireAuth()
-  const addresses = await prisma.address.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-  })
-  return addresses
+  try {
+    const session = await requireAuth()
+    const addresses = await prisma.address.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+    })
+    return addresses
+  } catch (error) {
+    if (error?.message === "UNAUTHORIZED") {
+      return []
+    }
+    throw error
+  }
 }
 
 export async function createAddress(data) {

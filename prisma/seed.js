@@ -160,6 +160,7 @@ async function main() {
   await prisma.orderEvent.deleteMany()
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  await prisma.coupon.deleteMany()
   await prisma.address.deleteMany()
   await prisma.productVariant.deleteMany()
   await prisma.product.deleteMany()
@@ -259,6 +260,39 @@ async function main() {
     })
   }
 
+  const couponSeeds = [
+    {
+      code: "WELCOME10",
+      description: "10% off your first order",
+      discountType: "PERCENT",
+      discountValue: 10,
+      isActive: true,
+    },
+    {
+      code: "VYNTARA25",
+      description: "$25 off orders over $150",
+      discountType: "AMOUNT",
+      discountValue: 2500,
+      isActive: true,
+    },
+    {
+      code: "STUDIO5",
+      description: "Studio pickup perk",
+      discountType: "PERCENT",
+      discountValue: 5,
+      isActive: true,
+    },
+  ]
+
+  await prisma.coupon.createMany({
+    data: couponSeeds,
+    skipDuplicates: true,
+  })
+
+  const couponByCode = new Map(
+    (await prisma.coupon.findMany()).map((coupon) => [coupon.code, coupon])
+  )
+
   const users = await prisma.user.findMany({
     where: { role: "CLIENT" },
     take: 2,
@@ -308,7 +342,7 @@ async function main() {
   })
 
   const demoOrderData = [
-    { status: "SHIPPED", trackingUrl: "https://tracking.example.com/demo-1" },
+    { status: "SHIPPED", trackingUrl: "https://tracking.example.com/demo-1", couponCode: "WELCOME10" },
     {
       status: "IN_PRODUCTION",
       trackingUrl: null,
@@ -316,7 +350,7 @@ async function main() {
       addressValidationError: "Street address appears incomplete (missing unit or suite).",
       addressValidationNote: "Please add apartment/suite number or confirm the full address.",
     },
-    { status: "DELIVERED", trackingUrl: "https://tracking.example.com/demo-2" },
+    { status: "DELIVERED", trackingUrl: "https://tracking.example.com/demo-2", couponCode: "VYNTARA25" },
     { status: "CANCELLED", trackingUrl: null },
   ]
 
@@ -377,9 +411,16 @@ async function main() {
       })
 
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents * item.qty, 0)
+      const coupon = orderConfig.couponCode ? couponByCode.get(orderConfig.couponCode) : null
+      const couponDiscountCents = coupon
+        ? coupon.discountType === "PERCENT"
+          ? Math.round(subtotalCents * (coupon.discountValue / 100))
+          : Math.min(subtotalCents, coupon.discountValue)
+        : 0
+      const discountedSubtotalCents = Math.max(0, subtotalCents - couponDiscountCents)
       const shippingCents = 1000
-      const taxCents = Math.round(subtotalCents * 0.09)
-      const totalCents = subtotalCents + shippingCents + taxCents
+      const taxCents = Math.round(discountedSubtotalCents * 0.09)
+      const totalCents = discountedSubtotalCents + shippingCents + taxCents
 
       const order = await prisma.order.create({
         data: {
@@ -391,6 +432,9 @@ async function main() {
           addressValidationNote: orderConfig.addressValidationNote || null,
           trackingUrl: orderConfig.trackingUrl,
           shippingAddressId: addressMap.get(user.id) || null,
+          couponId: coupon?.id || null,
+          couponCode: coupon?.code || null,
+          couponDiscountCents,
           subtotalCents,
           shippingCents,
           taxCents,

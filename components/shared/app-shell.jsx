@@ -2,15 +2,19 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ShoppingBag, Heart, User, Search, Menu, X } from "lucide-react"
+import { ShoppingBag, Heart, User, Search, Menu, X, LayoutDashboard, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useCart } from "@/lib/cart-context"
+import { useSession } from "next-auth/react"
 
 export function AppShell({ children }) {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { itemCount, isLoaded } = useCart()
+  const { data: session } = useSession()
+  const isLoggedIn = Boolean(session?.user)
+  const isAdmin = session?.user?.role === "ADMIN"
 
   // Hide header/footer on admin and account routes
   const isAdminRoute = pathname?.startsWith("/admin")
@@ -53,6 +57,16 @@ export function AppShell({ children }) {
             >
               Bestsellers
             </Link>
+            {isLoggedIn && (
+              <Link href="/account" className="text-sm font-medium hover:underline underline-offset-4 font-deck">
+                Dashboard
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/admin" className="text-sm font-medium hover:underline underline-offset-4 font-deck">
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Actions */}
@@ -114,6 +128,42 @@ export function AppShell({ children }) {
               >
                 Bestsellers
               </Link>
+              <Link
+                href="/account/wishlist"
+                className="text-sm font-medium font-deck flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Heart className="h-4 w-4" />
+                Favorites
+              </Link>
+              <Link
+                href="/cart"
+                className="text-sm font-medium font-deck flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                Cart
+              </Link>
+              {isLoggedIn && (
+                <Link
+                  href="/account"
+                  className="text-sm font-medium font-deck flex items-center gap-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="text-sm font-medium font-deck flex items-center gap-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Shield className="h-4 w-4" />
+                  Admin
+                </Link>
+              )}
             </nav>
           </div>
         )}

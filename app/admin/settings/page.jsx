@@ -4,10 +4,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { getStoreSettings, updateStoreSettings } from "@/app/actions/store-settings"
 
-export default function AdminSettings() {
+const formatCents = (value) => (value / 100).toFixed(2)
+
+export default async function AdminSettings() {
+  const settings = await getStoreSettings()
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <form action={updateStoreSettings} className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your store settings and preferences</p>
@@ -47,11 +52,39 @@ export default function AdminSettings() {
         <div className="space-y-4">
           <div>
             <Label htmlFor="shipping-fee">Standard Shipping Fee</Label>
-            <Input id="shipping-fee" type="number" defaultValue="10" className="mt-2" />
+            <Input
+              id="shipping-fee"
+              name="shippingStandard"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={formatCents(settings.shippingStandardCents)}
+              className="mt-2"
+            />
+          </div>
+          <div>
+            <Label htmlFor="express-shipping-fee">Express Shipping Fee</Label>
+            <Input
+              id="express-shipping-fee"
+              name="shippingExpress"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={formatCents(settings.shippingExpressCents)}
+              className="mt-2"
+            />
           </div>
           <div>
             <Label htmlFor="free-shipping">Free Shipping Threshold</Label>
-            <Input id="free-shipping" type="number" defaultValue="100" className="mt-2" />
+            <Input
+              id="free-shipping"
+              name="freeShippingThreshold"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={formatCents(settings.freeShippingThresholdCents)}
+              className="mt-2"
+            />
             <p className="text-sm text-muted-foreground mt-1">Orders above this amount qualify for free shipping</p>
           </div>
           <div>
@@ -108,9 +141,9 @@ export default function AdminSettings() {
       </Card>
 
       <div className="flex justify-end gap-4">
-        <Button variant="outline">Cancel</Button>
-        <Button>Save Changes</Button>
+        <Button type="button" variant="outline">Cancel</Button>
+        <Button type="submit">Save Changes</Button>
       </div>
-    </div>
+    </form>
   )
 }

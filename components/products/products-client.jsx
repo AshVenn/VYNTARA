@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import ProductCardWithCart from "@/components/products/product-card-with-cart"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -22,8 +22,18 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
   const [selectedSizes, setSelectedSizes] = useState([])
   const [selectedColors, setSelectedColors] = useState([])
   const [selectedFits, setSelectedFits] = useState([])
-  const [priceRange, setPriceRange] = useState([0, 500])
+  const maxPrice = useMemo(() => {
+    const prices = products.flatMap((product) => product.variants.map((variant) => variant.priceCents / 100))
+    if (prices.length === 0) return 0
+    return Math.max(...prices)
+  }, [products])
+
+  const [priceRange, setPriceRange] = useState([0, maxPrice])
   const [sortBy, setSortBy] = useState(sortParam || "newest")
+
+  useEffect(() => {
+    setPriceRange((prev) => [Math.min(prev[0], maxPrice), maxPrice])
+  }, [maxPrice])
 
   const allSizes = [...new Set(products.flatMap((p) => p.variants.map((v) => v.size)))]
   const allColors = [...new Set(products.flatMap((p) => p.variants.map((v) => v.color)))]
@@ -171,7 +181,7 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
         <h3 className="font-semibold mb-3">
           Price Range: ${priceRange[0]} - ${priceRange[1]}
         </h3>
-        <Slider min={0} max={500} step={10} value={priceRange} onValueChange={setPriceRange} className="mt-2" />
+        <Slider min={0} max={maxPrice} step={1} value={priceRange} onValueChange={setPriceRange} className="mt-2" />
       </div>
     </div>
   )
@@ -190,7 +200,7 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        <aside className="hidden lg:block w-64 flex-shrink-0">
+        <aside className="hidden lg:block w-64 shrink-0">
           <div className="sticky top-20">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Filters</h2>
@@ -202,7 +212,7 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
                   setSelectedSizes([])
                   setSelectedColors([])
                   setSelectedFits([])
-                  setPriceRange([0, 500])
+                  setPriceRange([0, maxPrice])
                 }}
               >
                 Clear
@@ -244,7 +254,7 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
               </Sheet>
 
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-45">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
@@ -263,12 +273,13 @@ export default function ProductsClient({ products, categories, favoriteIds = [],
 
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product, index) => (
                 <ProductCardWithCart
                   key={product.id}
                   product={product}
                   isFavorite={favoriteIds.includes(product.id)}
                   canFavorite={canFavorite}
+                  imagePriority={index < 4}
                 />
               ))}
             </div>

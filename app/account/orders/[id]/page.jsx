@@ -228,6 +228,12 @@ export default async function OrderDetailPage({ params }) {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatMoney(order.subtotalCents / 100)}</span>
               </div>
+              {order.couponDiscountCents > 0 && order.couponCode && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Discount ({order.couponCode})</span>
+                  <span className="text-green-600">-{formatMoney(order.couponDiscountCents / 100)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shipping</span>
                 <span>{formatMoney(order.shippingCents / 100)}</span>

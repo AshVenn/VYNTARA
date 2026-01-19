@@ -27,22 +27,34 @@ import {
   ShieldCheck,
   Package,
   Loader2,
-  Edit2,
   Trash2
 } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { createOrder } from "@/app/actions/checkout"
 import { getUserAddresses, createAddress, deleteAddress, validateUserAddress } from "@/app/actions/address"
+import { getStoreSettings } from "@/app/actions/store-settings"
+import { validateCoupon } from "@/app/actions/coupons"
 import { toast } from "sonner"
+import { useSession } from "next-auth/react"
+import { calculateCouponDiscount } from "@/lib/coupons"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const STEPS = [
   { id: "address", label: "Address", icon: MapPin },
@@ -59,18 +71,24 @@ const COUNTRIES = [
 
 export default function CheckoutPage() {
   const router = useRouter()
-  const { items, clearCart, isLoaded } = useCart()
+  const { status } = useSession()
+  const { items, clearCart, isLoaded, coupon, applyCoupon, clearCoupon } = useCart()
   const [currentStep, setCurrentStep] = useState(0)
   const [isPending, startTransition] = useTransition()
+  const [shippingSettings, setShippingSettings] = useState(null)
+  const [loadingSettings, setLoadingSettings] = useState(true)
+  const [couponCode, setCouponCode] = useState(coupon?.code || "")
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
   
   // Address state
   const [savedAddresses, setSavedAddresses] = useState([])
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
-  const [addressValidated, setAddressValidated] = useState(false)
+  const [validatedAddressKey, setValidatedAddressKey] = useState("")
   const [loadingAddresses, setLoadingAddresses] = useState(true)
   const [showAddressDialog, setShowAddressDialog] = useState(false)
+  const [addressToDelete, setAddressToDelete] = useState(null)
   
   // New address form
   const [newAddress, setNewAddress] = useState({
@@ -89,8 +107,31 @@ export default function CheckoutPage() {
   const [shippingMethod, setShippingMethod] = useState("standard")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
+  const buildAddressKey = (address) => {
+    if (!address) return ""
+    return [
+      address.fullName,
+      address.phone,
+      address.line1,
+      address.line2,
+      address.city,
+      address.region,
+      address.postalCode,
+      address.country,
+    ]
+      .map((value) => (value || "").trim().toLowerCase())
+      .join("|")
+  }
+
   // Load saved addresses
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login?callbackUrl=/checkout")
+      return
+    }
+
+    if (status !== "authenticated") return
+
     const loadAddresses = async () => {
       try {
         const addresses = await getUserAddresses()
@@ -106,16 +147,53 @@ export default function CheckoutPage() {
         setLoadingAddresses(false)
       }
     }
+
+    const loadSettings = async () => {
+      try {
+        const settings = await getStoreSettings()
+        setShippingSettings(settings)
+      } catch (error) {
+        console.error("Failed to load shipping settings:", error)
+      } finally {
+        setLoadingSettings(false)
+      }
+    }
+
     loadAddresses()
-  }, [])
+    loadSettings()
+  }, [router, status])
+
+  useEffect(() => {
+    setCouponCode(coupon?.code || "")
+  }, [coupon?.code])
 
   // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0)
-  const shippingCost = shippingMethod === "express" ? 20 : shippingMethod === "standard" ? 10 : 0
-  const tax = subtotal * 0.09
-  const total = subtotal + shippingCost + tax
+  const subtotalCents = Math.round(subtotal * 100)
+  const discountCents = calculateCouponDiscount(subtotalCents, coupon)
+  const discountedSubtotalCents = Math.max(0, subtotalCents - discountCents)
+  const shippingStandard = shippingSettings?.shippingStandardCents ?? 0
+  const shippingExpress = shippingSettings?.shippingExpressCents ?? 0
+  const shippingPickup = shippingSettings?.shippingPickupCents ?? 0
+  const freeShippingThreshold = shippingSettings?.freeShippingThresholdCents ?? 0
+  const qualifiesFreeShipping =
+    shippingMethod === "standard" && freeShippingThreshold > 0 && subtotalCents >= freeShippingThreshold
+  const baseShippingCents =
+    shippingMethod === "express"
+      ? shippingExpress
+      : shippingMethod === "standard"
+        ? shippingStandard
+        : shippingPickup
+  const shippingCost = (qualifiesFreeShipping ? 0 : baseShippingCents) / 100
+  const taxCents = Math.round(discountedSubtotalCents * 0.09)
+  const tax = taxCents / 100
+  const total = discountedSubtotalCents / 100 + shippingCost + tax
+  const formatShipping = (amount) => (amount === 0 ? "Free" : formatMoney(amount))
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId)
+  const addressForValidation = isAddingNew ? newAddress : selectedAddress
+  const validationKey = buildAddressKey(addressForValidation)
+  const isCurrentAddressValidated = validationKey && validationKey === validatedAddressKey
 
   const handleValidateAddress = async () => {
     const addressToValidate = isAddingNew ? newAddress : selectedAddress
@@ -123,12 +201,15 @@ export default function CheckoutPage() {
       toast.error("Please select or enter an address")
       return
     }
+    if (isCurrentAddressValidated) {
+      return
+    }
 
     setIsValidating(true)
     try {
       const result = await validateUserAddress(addressToValidate)
       if (result.success) {
-        setAddressValidated(true)
+        setValidatedAddressKey(validationKey)
         toast.success("Address validated successfully")
       } else {
         toast.error(result.error || "Address validation failed")
@@ -179,10 +260,13 @@ export default function CheckoutPage() {
     startTransition(async () => {
       const result = await deleteAddress(id)
       if (result.success) {
-        setSavedAddresses((prev) => prev.filter((a) => a.id !== id))
-        if (selectedAddressId === id) {
-          setSelectedAddressId(savedAddresses.find((a) => a.id !== id)?.id || null)
-        }
+        setSavedAddresses((prev) => {
+          const next = prev.filter((a) => a.id !== id)
+          if (selectedAddressId === id) {
+            setSelectedAddressId(next[0]?.id || null)
+          }
+          return next
+        })
         toast.success("Address deleted")
       } else {
         toast.error(result.error)
@@ -228,8 +312,8 @@ export default function CheckoutPage() {
       existingAddressId: isAddingNew ? null : selectedAddressId,
       address: isAddingNew ? {
         ...newAddress,
-        email: "",
       } : null,
+      couponCode: coupon?.code || null,
     }
 
     startTransition(async () => {
@@ -244,7 +328,33 @@ export default function CheckoutPage() {
     })
   }
 
-  if (!isLoaded || loadingAddresses) {
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast.error("Please enter a coupon code")
+      return
+    }
+    setIsApplyingCoupon(true)
+    try {
+      const result = await validateCoupon(couponCode)
+      if (result.success) {
+        applyCoupon(result.coupon)
+        toast.success("Coupon applied")
+      } else {
+        toast.error(result.error || "Coupon not valid")
+      }
+    } catch (error) {
+      toast.error("Unable to apply coupon")
+    } finally {
+      setIsApplyingCoupon(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    clearCoupon()
+    setCouponCode("")
+  }
+
+  if (status === "loading" || !isLoaded || loadingAddresses || loadingSettings) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -359,7 +469,7 @@ export default function CheckoutPage() {
                                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                 onClick={(e) => {
                                   e.preventDefault()
-                                  handleDeleteAddress(address.id)
+                                  setAddressToDelete(address)
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -398,14 +508,14 @@ export default function CheckoutPage() {
                         variant="outline"
                         className="w-full bg-transparent"
                         onClick={handleValidateAddress}
-                        disabled={isValidating}
+                        disabled={isValidating || isCurrentAddressValidated}
                       >
                         {isValidating ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                             Validating...
                           </>
-                        ) : addressValidated ? (
+                        ) : isCurrentAddressValidated ? (
                           <>
                             <Check className="h-4 w-4 mr-2 text-green-600" />
                             Address Validated
@@ -448,7 +558,9 @@ export default function CheckoutPage() {
                             <p className="text-sm text-muted-foreground">5-7 business days</p>
                           </div>
                         </div>
-                        <span className="font-semibold">{formatMoney(10)}</span>
+                        <span className="font-semibold">
+                          {formatShipping((qualifiesFreeShipping ? 0 : shippingStandard) / 100)}
+                        </span>
                       </label>
 
                       <label
@@ -464,7 +576,23 @@ export default function CheckoutPage() {
                             <p className="text-sm text-muted-foreground">2-3 business days</p>
                           </div>
                         </div>
-                        <span className="font-semibold">{formatMoney(20)}</span>
+                        <span className="font-semibold">{formatShipping(shippingExpress / 100)}</span>
+                      </label>
+
+                      <label
+                        htmlFor="pickup"
+                        className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
+                          shippingMethod === "pickup" ? "border-primary bg-primary/5" : "border-border"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value="pickup" id="pickup" />
+                          <div>
+                            <p className="font-medium">Store Pickup</p>
+                            <p className="text-sm text-muted-foreground">Pick up from our studio</p>
+                          </div>
+                        </div>
+                        <span className="font-semibold">{formatShipping(shippingPickup / 100)}</span>
                       </label>
                     </div>
                   </RadioGroup>
@@ -597,14 +725,54 @@ export default function CheckoutPage() {
 
                 <Separator />
 
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Promo Code</p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Coupon code"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      disabled={Boolean(coupon)}
+                    />
+                    {coupon ? (
+                      <Button variant="outline" onClick={handleRemoveCoupon} className="bg-transparent">
+                        Remove
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={handleApplyCoupon}
+                        disabled={isApplyingCoupon}
+                        className="bg-transparent"
+                      >
+                        {isApplyingCoupon ? "..." : "Apply"}
+                      </Button>
+                    )}
+                  </div>
+                  {coupon && (
+                    <p className="text-xs text-muted-foreground">
+                      Applied: <span className="font-medium text-foreground">{coupon.code}</span>
+                      {coupon.description ? ` - ${coupon.description}` : ""}
+                    </p>
+                  )}
+                </div>
+
+                <Separator />
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
                     <span>{formatMoney(subtotal)}</span>
                   </div>
+                  {discountCents > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Discount ({coupon.code})</span>
+                      <span className="text-green-600">-{formatMoney(discountCents / 100)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>{formatMoney(shippingCost)}</span>
+                    <span>{formatShipping(shippingCost)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax</span>
@@ -656,6 +824,30 @@ export default function CheckoutPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!addressToDelete} onOpenChange={(open) => !open && setAddressToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Address</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this address? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!addressToDelete) return
+                handleDeleteAddress(addressToDelete.id)
+                setAddressToDelete(null)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -751,7 +943,7 @@ function AddressForm({ address, onChange, onSave, isPending, showSaveButton = tr
         <div>
           <Label htmlFor="country">Country *</Label>
           <Select value={address.country} onValueChange={(value) => onChange({ ...address, country: value })}>
-            <SelectTrigger className="mt-1.5">
+            <SelectTrigger id="country" className="mt-1.5">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

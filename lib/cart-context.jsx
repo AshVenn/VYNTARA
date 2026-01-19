@@ -6,11 +6,13 @@ const CartContext = createContext(null)
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState([])
+  const [coupon, setCoupon] = useState(null)
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const raw = window.localStorage.getItem("cartItems")
+    const rawCoupon = window.localStorage.getItem("cartCoupon")
     if (raw) {
       try {
         const parsed = JSON.parse(raw)
@@ -19,13 +21,22 @@ export function CartProvider({ children }) {
         setItems([])
       }
     }
+    if (rawCoupon) {
+      try {
+        const parsed = JSON.parse(rawCoupon)
+        setCoupon(parsed || null)
+      } catch {
+        setCoupon(null)
+      }
+    }
     setIsLoaded(true)
   }, [])
 
   useEffect(() => {
     if (!isLoaded) return
     window.localStorage.setItem("cartItems", JSON.stringify(items))
-  }, [items, isLoaded])
+    window.localStorage.setItem("cartCoupon", JSON.stringify(coupon))
+  }, [items, coupon, isLoaded])
 
   const addItem = useCallback((item) => {
     setItems((prev) => {
@@ -55,6 +66,15 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => {
     setItems([])
+    setCoupon(null)
+  }, [])
+
+  const applyCoupon = useCallback((nextCoupon) => {
+    setCoupon(nextCoupon)
+  }, [])
+
+  const clearCoupon = useCallback(() => {
+    setCoupon(null)
   }, [])
 
   const itemCount = items.reduce((sum, item) => sum + item.qty, 0)
@@ -63,12 +83,15 @@ export function CartProvider({ children }) {
     <CartContext.Provider
       value={{
         items,
+        coupon,
         itemCount,
         isLoaded,
         addItem,
         updateItem,
         removeItem,
         clearCart,
+        applyCoupon,
+        clearCoupon,
       }}
     >
       {children}

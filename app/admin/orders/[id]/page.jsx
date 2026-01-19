@@ -137,6 +137,12 @@ export default async function AdminOrderDetail({ params }) {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>${(order.subtotalCents / 100).toFixed(2)}</span>
               </div>
+              {order.couponDiscountCents > 0 && order.couponCode && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Discount ({order.couponCode})</span>
+                  <span className="text-green-600">-${(order.couponDiscountCents / 100).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shipping</span>
                 <span>${(order.shippingCents / 100).toFixed(2)}</span>

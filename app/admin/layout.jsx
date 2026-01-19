@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Menu, X, LogOut, Tags } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingCart, Users, BarChart3, Settings, Menu, X, LogOut, Tags, BadgePercent } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { signOut } from "next-auth/react"
@@ -16,6 +16,7 @@ const navigation = [
   { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
   { name: "Customers", href: "/admin/customers", icon: Users },
   { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+  { name: "Coupons", href: "/admin/coupons", icon: BadgePercent },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ]
 
@@ -87,7 +88,9 @@ export default function AdminLayout({ children }) {
         <header className="hidden lg:flex items-center justify-between border-b bg-background px-8 py-4">
           <div>
             <p className="text-sm text-muted-foreground">Admin</p>
-            <h2 className="text-lg font-semibold">Dashboard</h2>
+            <Link href="/admin" className="text-lg font-semibold hover:underline">
+              Dashboard
+            </Link>
           </div>
           <Button variant="outline" onClick={() => signOut({ callbackUrl: "/login" })}>
             <LogOut className="w-4 h-4 mr-2" />
