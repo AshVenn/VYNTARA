@@ -56,6 +56,7 @@ export default function OrdersTable({ orders }) {
       accessorKey: "status",
       cell: (row) => {
         const statusColors = {
+          PENDING_PAYMENT: "secondary",
           PAID: "secondary",
           IN_PRODUCTION: "default",
           SHIPPED: "default",
@@ -64,7 +65,7 @@ export default function OrdersTable({ orders }) {
         }
         return (
           <Badge variant={statusColors[row.status] ?? "secondary"}>
-            {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+            {row.status.replace(/_/g, " ").toLowerCase()}
           </Badge>
         )
       },
@@ -97,6 +98,26 @@ export default function OrdersTable({ orders }) {
         return null
       },
     },
+    {
+      header: "Label",
+      accessorKey: "labelUrl",
+      cell: (row) =>
+        row.labelUrl ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-transparent"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(row.labelUrl, "_blank")
+            }}
+          >
+            Download
+          </Button>
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        ),
+    },
   ]
 
   return (
@@ -117,6 +138,7 @@ export default function OrdersTable({ orders }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Orders</SelectItem>
+            <SelectItem value="PENDING_PAYMENT">Pending Payment</SelectItem>
             <SelectItem value="PAID">Paid</SelectItem>
             <SelectItem value="IN_PRODUCTION">Production</SelectItem>
             <SelectItem value="SHIPPED">Shipped</SelectItem>

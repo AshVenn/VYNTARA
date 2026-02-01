@@ -28,7 +28,7 @@ export async function createOrder(payload) {
   const variantIds = items.map((item) => item.variantId)
   const variants = await prisma.productVariant.findMany({
     where: { id: { in: variantIds } },
-    select: { id: true, productId: true, priceCents: true, available: true },
+    select: { id: true, productId: true, priceCents: true, available: true, stockQty: true, reservedQty: true },
   })
 
   if (variants.length !== variantIds.length) {
@@ -44,6 +44,10 @@ export async function createOrder(payload) {
     }
     if (!variant.available) {
       throw new Error("One or more items are out of stock")
+    }
+    const availableQty = (variant.stockQty ?? 0) - (variant.reservedQty ?? 0)
+    if (availableQty < item.qty) {
+      throw new Error("Insufficient inventory for one or more items")
     }
   }
 
@@ -123,9 +127,11 @@ export async function createOrder(payload) {
       throw new Error("Shipping address is required")
     }
 
-    return tx.order.create({
+    const order = await tx.order.create({
       data: {
         userId: session.user.id,
+        status: "PENDING_PAYMENT",
+        paymentStatus: "REQUIRES_PAYMENT",
         shippingAddressId,
         couponId: coupon?.id || null,
         couponCode: normalizedCouponCode || null,
@@ -153,6 +159,20 @@ export async function createOrder(payload) {
         },
       },
     })
+
+    // reserve inventory
+    await Promise.all(
+      items.map((item) =>
+        tx.productVariant.update({
+          where: { id: item.variantId },
+          data: {
+            reservedQty: { increment: item.qty },
+          },
+        }),
+      ),
+    )
+
+    return order
   })
 
   revalidatePath("/account/orders")

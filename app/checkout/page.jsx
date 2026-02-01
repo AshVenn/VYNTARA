@@ -55,7 +55,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-
 const STEPS = [
   { id: "address", label: "Address", icon: MapPin },
   { id: "shipping", label: "Shipping", icon: Truck },
@@ -318,12 +317,25 @@ export default function CheckoutPage() {
 
     startTransition(async () => {
       try {
-        const result = await createOrder(payload)
-        clearCart()
-        toast.success("Order placed successfully!")
-        router.push(`/account/orders/${result.orderId}`)
+        const response = await fetch("/api/checkout/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || "Failed to start checkout")
+        }
+        const data = await response.json()
+        if (data.url) {
+          clearCart()
+          toast.success("Redirecting to secure payment...")
+          window.location = data.url
+        } else {
+          throw new Error("Missing Stripe session URL")
+        }
       } catch (error) {
-        toast.error(error.message || "Failed to place order")
+        toast.error(error.message || "Failed to start checkout")
       }
     })
   }
@@ -614,26 +626,27 @@ export default function CheckoutPage() {
             {currentStep === 2 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    Payment
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      This is a demo checkout. No real payment will be processed.
-                    </AlertDescription>
-                  </Alert>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Payment will be collected after admin confirms your order. Your order will be created in <b>pending
+                  payment</b> status.
+                </AlertDescription>
+              </Alert>
 
-                  <div className="p-6 border border-dashed border-border rounded-lg text-center">
-                    <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-2">Payment integration placeholder</p>
-                    <p className="text-sm text-muted-foreground">
-                      In production, integrate Stripe, PayPal, or other payment providers
-                    </p>
-                  </div>
+              <div className="p-6 border border-dashed border-border rounded-lg text-center">
+                <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground mb-2">Secure payment coming soon</p>
+                <p className="text-sm text-muted-foreground">
+                  You will not be charged now. We’ll email you when payment is required.
+                </p>
+              </div>
 
                   <div className="flex items-start gap-3">
                     <Checkbox
@@ -683,7 +696,7 @@ export default function CheckoutPage() {
                   ) : (
                     <>
                       <Check className="h-4 w-4 mr-2" />
-                      Place Order - {formatMoney(total)}
+                      Place Order (payment pending)
                     </>
                   )}
                 </Button>

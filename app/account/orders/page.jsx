@@ -43,6 +43,8 @@ export default async function OrdersPage() {
 
   const getStatusColor = (status) => {
     switch (status) {
+      case "PENDING_PAYMENT":
+        return "bg-gray-100 text-gray-800"
       case "DELIVERED":
         return "bg-green-100 text-green-800"
       case "SHIPPED":
@@ -73,7 +75,7 @@ export default async function OrdersPage() {
                 </p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
-                {order.status.toLowerCase()}
+                {order.status.replace(/_/g, " ").toLowerCase()}
               </span>
             </div>
 

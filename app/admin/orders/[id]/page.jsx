@@ -5,6 +5,7 @@ import {
   buyShippingLabel,
   getShippingRates,
   markHandedToCarrier,
+  markDelivered,
   updateOrderStatus,
   updateOrderTracking,
   validateOrderAddress,
@@ -23,10 +24,14 @@ import { OrderEventsList } from "@/components/admin/order-events-list"
 import { AddressValidationPanel } from "@/components/admin/address-validation-panel"
 
 const buildTimeline = (status) => {
-  const stages = ["PAID", "IN_PRODUCTION", "SHIPPED", "DELIVERED"]
-  return stages.map((stage) => ({
-    label: stage.charAt(0) + stage.slice(1).toLowerCase(),
-    completed: stages.indexOf(stage) <= stages.indexOf(status),
+  const stages = ["PENDING_PAYMENT", "PAID", "IN_PRODUCTION", "SHIPPED", "DELIVERED"]
+  const currentIndex = stages.indexOf(status)
+  return stages.map((stage, idx) => ({
+    label:
+      stage === "PENDING_PAYMENT"
+        ? "Pending Payment"
+        : stage.charAt(0) + stage.slice(1).toLowerCase().replace("_", " "),
+    completed: currentIndex >= 0 && idx <= currentIndex,
   }))
 }
 
@@ -183,19 +188,22 @@ export default async function AdminOrderDetail({ params }) {
         <div className="space-y-6">
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-4">Update Status</h2>
-            <Badge className="mb-4">{order.status.charAt(0) + order.status.slice(1).toLowerCase()}</Badge>
+            <Badge className="mb-4">
+              {order.status.replace(/_/g, " ").toLowerCase()}
+            </Badge>
             <form action={updateOrderStatus} className="space-y-3">
               <input type="hidden" name="id" value={order.id} />
               <Select name="status" defaultValue={order.status}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PAID">Paid</SelectItem>
-                  <SelectItem value="IN_PRODUCTION">Production</SelectItem>
-                  <SelectItem value="SHIPPED">Shipped</SelectItem>
-                  <SelectItem value="DELIVERED">Delivered</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PENDING_PAYMENT">Pending Payment</SelectItem>
+                <SelectItem value="PAID">Paid</SelectItem>
+                <SelectItem value="IN_PRODUCTION">Production</SelectItem>
+                <SelectItem value="SHIPPED">Shipped</SelectItem>
+                <SelectItem value="DELIVERED">Delivered</SelectItem>
+                <SelectItem value="CANCELLED">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
               <Button type="submit" className="w-full">
@@ -279,6 +287,16 @@ export default async function AdminOrderDetail({ params }) {
                   <input type="hidden" name="shipmentId" value={shipment?.id || ""} />
                   <Button type="submit" className="w-full">
                     Mark as Handed to Carrier
+                  </Button>
+                </form>
+              )}
+
+              {shipment?.labelUrl && (order.fulfillmentStatus === "HANDED_TO_CARRIER" || order.fulfillmentStatus === "LABEL_PURCHASED") && (
+                <form action={markDelivered}>
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <input type="hidden" name="shipmentId" value={shipment?.id || ""} />
+                  <Button type="submit" variant="outline" className="w-full bg-transparent">
+                    Mark as Delivered
                   </Button>
                 </form>
               )}

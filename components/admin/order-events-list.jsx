@@ -86,7 +86,7 @@ export function OrderEventsList({ events = [] }) {
                     {event.type.replace(/_/g, " ")}
                   </p>
                   {event.message && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    <p className="text-xs text-muted-foreground mt-0.5 whitespace-normal break-words">
                       {event.message}
                     </p>
                   )}

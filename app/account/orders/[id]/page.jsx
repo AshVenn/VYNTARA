@@ -120,12 +120,12 @@ export default async function OrderDetailPage({ params }) {
                 day: "numeric",
                 year: "numeric",
                 hour: "numeric",
-                minute: "2-digit",
-              })}
-            </p>
-          </div>
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
           <span className="px-3 py-1 text-xs font-semibold capitalize bg-blue-100 text-blue-800">
-            {order.status.toLowerCase()}
+            {order.status.replace(/_/g, " ").toLowerCase()}
           </span>
         </div>
 

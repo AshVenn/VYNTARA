@@ -43,6 +43,7 @@ export default async function EditProductPage({ params }) {
     priceCents: variant.priceCents,
     sku: variant.sku,
     available: variant.available,
+    stockQty: variant.stockQty ?? 0,
   }))
 
   return (

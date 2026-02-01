@@ -16,8 +16,8 @@ export default async function NewProductPage() {
   })
 
   const initialVariants = [
-    { size: "S", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-S-B", available: true },
-    { size: "M", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-M-B", available: true },
+    { size: "S", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-S-B", available: true, stockQty: 0 },
+    { size: "M", color: "Black", fit: "Regular", priceCents: 14900, sku: "SKU-M-B", available: true, stockQty: 0 },
   ]
 
   return (

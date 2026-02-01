@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { useSession } from "next-auth/react"
 
 const CartContext = createContext(null)
 
@@ -8,29 +9,68 @@ export function CartProvider({ children }) {
   const [items, setItems] = useState([])
   const [coupon, setCoupon] = useState(null)
   const [isLoaded, setIsLoaded] = useState(false)
+  const { data: session, status } = useSession()
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const raw = window.localStorage.getItem("cartItems")
-    const rawCoupon = window.localStorage.getItem("cartCoupon")
-    if (raw) {
+
+    const loadLocal = () => {
+      const raw = window.localStorage.getItem("cartItems")
+      const rawCoupon = window.localStorage.getItem("cartCoupon")
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw)
+          setItems(Array.isArray(parsed) ? parsed : [])
+        } catch {
+          setItems([])
+        }
+      }
+      if (rawCoupon) {
+        try {
+          const parsed = JSON.parse(rawCoupon)
+          setCoupon(parsed || null)
+        } catch {
+          setCoupon(null)
+        }
+      }
+      setIsLoaded(true)
+    }
+
+    const loadServer = async () => {
       try {
-        const parsed = JSON.parse(raw)
-        setItems(Array.isArray(parsed) ? parsed : [])
+        const res = await fetch("/api/cart", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data.items)) {
+            setItems(
+              data.items.map((item) => ({
+                id: item.id,
+                productId: item.productId,
+                variantId: item.variantId,
+                qty: item.qty,
+                price: item.priceCents / 100,
+                productTitle: item.productTitle,
+                productImage: item.productImage,
+                variant: item.variant,
+              })),
+            )
+          }
+        } else {
+          loadLocal()
+        }
       } catch {
-        setItems([])
+        loadLocal()
+      } finally {
+        setIsLoaded(true)
       }
     }
-    if (rawCoupon) {
-      try {
-        const parsed = JSON.parse(rawCoupon)
-        setCoupon(parsed || null)
-      } catch {
-        setCoupon(null)
-      }
+
+    if (status === "authenticated") {
+      loadServer()
+    } else {
+      loadLocal()
     }
-    setIsLoaded(true)
-  }, [])
+  }, [status])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -38,36 +78,69 @@ export function CartProvider({ children }) {
     window.localStorage.setItem("cartCoupon", JSON.stringify(coupon))
   }, [items, coupon, isLoaded])
 
+  const syncServerCart = useCallback(
+    async (nextItems) => {
+      if (status !== "authenticated") return
+      try {
+        await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: nextItems.map((item) => ({
+              productId: item.productId,
+              variantId: item.variantId,
+              qty: item.qty,
+            })),
+          }),
+        })
+      } catch (error) {
+        console.error("Failed to sync cart", error)
+      }
+    },
+    [status],
+  )
+
   const addItem = useCallback((item) => {
     setItems((prev) => {
       const existing = prev.find(
         (entry) => entry.productId === item.productId && entry.variantId === item.variantId
       )
+      let next
       if (existing) {
-        return prev.map((entry) =>
+        next = prev.map((entry) =>
           entry.productId === item.productId && entry.variantId === item.variantId
             ? { ...entry, qty: entry.qty + item.qty }
             : entry
         )
+      } else {
+        next = [...prev, item]
       }
-      return [...prev, item]
+      syncServerCart(next)
+      return next
     })
-  }, [])
+  }, [syncServerCart])
 
   const updateItem = useCallback((itemId, qty) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, qty } : item))
-    )
-  }, [])
+    setItems((prev) => {
+      const next = prev.map((item) => (item.id === itemId ? { ...item, qty } : item))
+      syncServerCart(next)
+      return next
+    })
+  }, [syncServerCart])
 
   const removeItem = useCallback((itemId) => {
-    setItems((prev) => prev.filter((item) => item.id !== itemId))
-  }, [])
+    setItems((prev) => {
+      const next = prev.filter((item) => item.id !== itemId)
+      syncServerCart(next)
+      return next
+    })
+  }, [syncServerCart])
 
   const clearCart = useCallback(() => {
     setItems([])
     setCoupon(null)
-  }, [])
+    syncServerCart([])
+  }, [syncServerCart])
 
   const applyCoupon = useCallback((nextCoupon) => {
     setCoupon(nextCoupon)

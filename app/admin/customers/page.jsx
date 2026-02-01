@@ -1,12 +1,26 @@
 import prisma from "@/lib/prisma"
 import CustomersTable from "@/components/admin/customers-table"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
-export default async function AdminCustomers() {
-  const users = await prisma.user.findMany({
-    where: { role: "CLIENT" },
-    include: { orders: true },
-    orderBy: { createdAt: "desc" },
-  })
+const resolveParams = async (params) => (params && typeof params.then === "function" ? await params : params)
+
+export default async function AdminCustomers({ searchParams }) {
+  const resolved = await resolveParams(searchParams)
+  const page = Math.max(1, Number(resolved?.page) || 1)
+  const pageSize = 20
+  const skip = (page - 1) * pageSize
+
+  const [users, totalCount] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: "CLIENT" },
+      skip,
+      take: pageSize,
+      include: { orders: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.count({ where: { role: "CLIENT" } }),
+  ])
 
   const customersWithStats = users.map((user) => {
     const ordersCount = user.orders.length
@@ -26,6 +40,8 @@ export default async function AdminCustomers() {
     }
   })
 
+  const hasNext = skip + users.length < totalCount
+
   return (
     <div className="space-y-6">
       <div>
@@ -34,6 +50,20 @@ export default async function AdminCustomers() {
       </div>
 
       <CustomersTable customers={customersWithStats} />
+
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">
+          Page {page} • {Math.min(skip + users.length, totalCount)} of {totalCount}
+        </span>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" disabled={page <= 1} className="bg-transparent">
+            <Link href={`/admin/customers?page=${page - 1}`}>Previous</Link>
+          </Button>
+          <Button asChild variant="outline" disabled={!hasNext} className="bg-transparent">
+            <Link href={`/admin/customers?page=${page + 1}`}>Next</Link>
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

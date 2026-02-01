@@ -364,10 +364,50 @@ export async function updateOrderStatus(formData) {
   if (!parsed.success) {
     throw new Error("Invalid status")
   }
-  await prisma.order.update({
+  const order = await prisma.order.findUnique({
     where: { id: parsed.data.id },
-    data: { status: parsed.data.status },
+    include: { items: true },
   })
+  if (!order) {
+    throw new Error("Order not found")
+  }
+
+  if (order.status === "CANCELLED" && parsed.data.status === "CANCELLED") {
+    return redirect(buildToastRedirect(returnTo || `/admin/orders/${parsed.data.id}`, "Order%20status%20updated"))
+  }
+
+  const updates = [
+    prisma.order.update({
+      where: { id: parsed.data.id },
+      data: { status: parsed.data.status },
+    }),
+  ]
+
+  if (parsed.data.status === "CANCELLED") {
+    for (const item of order.items) {
+      if (order.paymentStatus === "PAID") {
+        updates.push(
+          prisma.productVariant.update({
+            where: { id: item.variantId },
+            data: {
+              stockQty: { increment: item.qty },
+            },
+          }),
+        )
+      } else {
+        updates.push(
+          prisma.productVariant.update({
+            where: { id: item.variantId },
+            data: {
+              reservedQty: { decrement: item.qty },
+            },
+          }),
+        )
+      }
+    }
+  }
+
+  await prisma.$transaction(updates)
   revalidatePath(`/admin/orders/${parsed.data.id}`)
   revalidatePath("/admin/orders")
   redirect(buildToastRedirect(returnTo || `/admin/orders/${parsed.data.id}`, "Order%20status%20updated"))
@@ -664,6 +704,11 @@ export async function buyShippingLabel(formData) {
       throw new Error("No shipment available to purchase a label.")
     }
 
+    const targetShipment = order.shipments.find((s) => s.id === targetShipmentId)
+    if (targetShipment?.shippoTransactionId) {
+      throw new Error("Label already purchased for this shipment.")
+    }
+
     const transaction = await buyLabel({ rateId: parsed.data.rateId })
     const rate = transaction?.rate || {}
     const rateCents = rate?.amount ? Math.round(Number(rate.amount) * 100) : null
@@ -679,13 +724,16 @@ export async function buyShippingLabel(formData) {
           carrier: rate.provider || transaction.carrier || null,
           service: rate.servicelevel?.name || rate.servicelevel?.token || null,
           rateCents,
+          rateCurrency: rate.currency || rate.currency_local || rate.provider_account?.currency || "USD",
+          selectedRateId: parsed.data.rateId,
+          labelFileType: transaction.label_file_type || "PDF",
+          labelPurchasedAt: new Date(),
           status: transaction.status || "PURCHASED",
         },
       }),
       prisma.order.update({
         where: { id: order.id },
         data: {
-          status: "SHIPPED",
           fulfillmentStatus: "LABEL_PURCHASED",
           trackingUrl: transaction.tracking_url_provider || transaction.tracking_url || undefined,
         },
@@ -783,6 +831,77 @@ export async function markHandedToCarrier(formData) {
   }
 }
 
+export async function markDelivered(formData) {
+  await requireRole("ADMIN")
+  const returnTo = formData.get("returnTo")
+  try {
+    const payload = {
+      orderId: formData.get("orderId"),
+      shipmentId: formData.get("shipmentId") || null,
+    }
+    const parsed = shipmentActionSchema.safeParse(payload)
+    if (!parsed.success) {
+      throw new Error("Invalid order id")
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      include: {
+        shipments: { orderBy: { createdAt: "desc" } },
+      },
+    })
+    if (!order) {
+      throw new Error("Order not found")
+    }
+
+    const shipmentId = parsed.data.shipmentId || order.shipments[0]?.id
+
+    const updates = [
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: "DELIVERED",
+          fulfillmentStatus: "DELIVERED",
+        },
+      }),
+      prisma.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "DELIVERED",
+          message: "Marked delivered (manual).",
+        },
+      }),
+    ]
+
+    if (shipmentId) {
+      updates.push(
+        prisma.shipment.update({
+          where: { id: shipmentId },
+          data: { status: "DELIVERED" },
+        }),
+      )
+    }
+
+    await prisma.$transaction(updates)
+
+    revalidatePath(`/admin/orders/${order.id}`)
+    revalidatePath("/admin/orders")
+    redirect(buildToastRedirect(returnTo || `/admin/orders/${order.id}`, "Marked%20delivered"))
+  } catch (error) {
+    if (isRedirect(error)) {
+      throw error
+    }
+    console.error(error)
+    redirect(
+      buildToastRedirect(
+        returnTo || "/admin/orders",
+        toToastMessage(error?.message, "Failed to update delivery status"),
+        "error",
+      ),
+    )
+  }
+}
+
 export async function refreshTracking(formData) {
   await requireRole("ADMIN")
   const returnTo = formData.get("returnTo")
@@ -836,18 +955,6 @@ export async function refreshTracking(formData) {
           },
         })
       )
-
-      if (status.includes("DELIVERED")) {
-        updates.push(
-          prisma.order.update({
-            where: { id: order.id },
-            data: {
-              status: "DELIVERED",
-              fulfillmentStatus: "DELIVERED",
-            },
-          })
-        )
-      }
     }
 
     for (const event of trackingHistory) {

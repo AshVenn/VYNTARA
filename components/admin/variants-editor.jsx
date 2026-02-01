@@ -23,6 +23,7 @@ const buildDefaultVariant = () => ({
   priceCents: 14900,
   sku: "SKU-M-B",
   available: true,
+  stockQty: 0,
 })
 
 export default function VariantsEditor({ name, initialVariants }) {
@@ -35,6 +36,7 @@ export default function VariantsEditor({ name, initialVariants }) {
         priceCents: Number(variant.priceCents) || 0,
         sku: variant.sku || "",
         available: Boolean(variant.available),
+        stockQty: Number(variant.stockQty ?? 0) || 0,
       }))
     }
     return [buildDefaultVariant()]
@@ -126,6 +128,20 @@ export default function VariantsEditor({ name, initialVariants }) {
                   value={variant.priceCents}
                   onChange={(event) =>
                     updateVariant(index, { priceCents: Number.parseInt(event.target.value, 10) || 0 })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor={`variant-stock-${index}`}>Stock</Label>
+                <Input
+                  id={`variant-stock-${index}`}
+                  type="number"
+                  min="0"
+                  className="mt-2"
+                  value={variant.stockQty}
+                  onChange={(event) =>
+                    updateVariant(index, { stockQty: Number.parseInt(event.target.value, 10) || 0 })
                   }
                 />
               </div>

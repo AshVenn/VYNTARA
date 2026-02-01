@@ -110,11 +110,11 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <body className={`${beatrice.variable} ${beatrice.className} ${beatriceDeck.variable}`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <CartProvider>
-            <AppSessionProvider>
+          <AppSessionProvider>
+            <CartProvider>
               <AppShell>{children}</AppShell>
-            </AppSessionProvider>
-          </CartProvider>
+            </CartProvider>
+          </AppSessionProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
